@@ -24,22 +24,21 @@ env1_model = StructuralCausalModel1(dim_x + 1)
 env2_model = StructuralCausalModel2(dim_x + 1)
 X1_test, _1, _2 = env1_model.sample(10000)
 X2_test, _1, _2 = env2_model.sample(10000)
-X_cov = np.matmul(X1_test.T, X1_test) / 20000 + np.matmul(X2_test.T, X2_test) / 20000
+X_cov = np.eye(dim_x)#np.matmul(X1_test.T, X1_test) / 20000 + np.matmul(X2_test.T, X2_test) / 20000
 
 num_n = results.shape[0]
 num_sml = results.shape[1]
 
 vec_n = [100, 300, 700, 1000, 2000]
-method_name = ['EILLS', "ICP", "Anchor", "IRM", "PLS"]
-method_idx = [0, 5, 7, 6, 9]
+method_name = ['EILLS', "EILLS+refit", r"LS $S^*$", r"LS $G^c$", 'FAIR']
+method_idx = [0, 2, 3, 4, 1]
 
 lines = [
 	'solid',
 	'solid',
 	'dotted',
 	'dotted',
-	'dashed',
-	'dotted'
+	'solid'
 ]
 
 markers = [
@@ -54,15 +53,14 @@ markers = [
 colors = [
 	'#05348b',
 	'#6bb392',
-	'#9acdc4',
+	'#ae1908',
 	'#ec813b',
-	'#e5a84b',
-	'#6bb392'
+	'#9acdc4',
 ]
 
 fig = plt.figure(figsize=(5, 6))
 ax1 = fig.add_subplot(111)
-plt.subplots_adjust(top=0.98, bottom=0.1, left=0.17, right=0.98)
+plt.subplots_adjust(top=0.98, bottom=0.1, left=0.15, right=0.98)
 ax1.set_ylabel(r"$\|\bar{\Sigma}^{1/2}(\hat{\beta} - \beta^*)\|_2^2$")
 
 dim_x = 12

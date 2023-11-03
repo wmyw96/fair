@@ -26,9 +26,9 @@ sets_interested = [
 	set_lse
 ]
 
-num_repeats = 300
+num_repeats = 50
 
-np.random.seed(0)
+#np.random.seed(0)
 
 methods = [
 	eills,
@@ -43,25 +43,33 @@ methods = [
 	erm
 ]
 
+method_name = [
+	'EILLS',
+	'FAIR',
+	'EILLS+refit',
+	'LSE S_star',
+	'LSE Gc',
+	'ICP',
+	'IRM',
+	'Anchor',
+	'CausalDantzig',
+	'ERM'
+]
+
 result = np.zeros((len(candidate_n), num_repeats, len(methods), dim_x))
 
-for (ni, n) in enumerate(candidate_n):
-	for t in range(num_repeats):
-		print(f'Running Case: n = {n}, t = {t}')
-		# generate data
-		xs, ys = [], []
-		oracle_var = 0
-		for i in range(2):
-			x, y, _ = models[i].sample(n)
-			xs.append(x)
-			ys.append(y)
+n = 600
+# generate data
+xs, ys = [], []
+oracle_var = 0
+for i in range(2):
+	x, y, _ = models[i].sample(n)
+	xs.append(x)
+	ys.append(y)
 
-		for mid, method in enumerate(methods):
-			beta = method(xs, ys, true_coeff)
-			
-			# restore the estimated coeffs
-			result[ni, t, mid, :] = beta
+for mid, method in enumerate(methods):
+	beta = method(xs, ys, true_coeff)
+	print(f'Method {method_name[mid]}: {beta}')
 
-np.save('eills_demo.npy', result)
 
 
