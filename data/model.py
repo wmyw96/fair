@@ -214,7 +214,17 @@ def linear_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, no
 		models.append(model)
 	true = coeff_mat0[y_index, :]
 	true[y_index] = 0.0
-	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set
+
+	offspring_set = []
+	for i in range(y_index+1, num_vars):
+		if func_mat[i, y_index] > 0:
+			offspring_set.append(i)
+		#else:
+		#	for j in range(y_index+1, i):
+		#		if func_mat[i, j] > 0 and j in offspring_set:
+		#			offspring_set.append(i)
+
+	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set, offspring_set
 
 
 def SCM_ex1():
