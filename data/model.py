@@ -154,13 +154,14 @@ def random_assignment_matrix(num_vars, ratio, function_id_max, coefficient_max, 
 	return function_matrix, coefficient_matrix
 
 
-def linear_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, nonlinear_id=5):
+def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, nonlinear_id=5, law='linear'):
 	if y_index is None:
 		y_index = np.random.randint(num_vars - 1) + 1
 
 	models = []
 	func_mat0, coeff_mat0 = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1, 3)
-	func_mat0[y_index, :] = np.minimum(func_mat0[y_index, :], 1)
+	if law == 'linear':
+		func_mat0[y_index, :] = np.minimum(func_mat0[y_index, :], 1)
 
 	num_child = np.sum(func_mat0 > 0, 0)[y_index]
 	if num_child < min_child:
@@ -169,7 +170,6 @@ def linear_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, no
 			if func_mat0[i, y_index] == 0:
 				remain_child -= 1
 				func_mat0[i, y_index] = 1
-				print(f'assign child {i}')
 			if remain_child == 0:
 				break
 
@@ -198,8 +198,6 @@ def linear_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, no
 			coeff_mat0[i, y_index] = (np.abs(np.random.uniform(0, 1)) + 0.5) * (2*np.random.randint(2)-1)
 			child_set.append(i)
 
-	print(f'Linear SCM: parents = {parent_set}, children = {[(i-1) for i in child_set]}')
-	print(func_mat0, y_index)
 	for i in range(num_envs):
 		func_mat, coeff_mat = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1.5, 3, func_mat0)
 		func_mat[y_index, :] = func_mat0[y_index, :]
@@ -216,15 +214,17 @@ def linear_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, no
 	true[y_index] = 0.0
 
 	offspring_set = []
+	child_set = []
 	for i in range(y_index+1, num_vars):
 		if func_mat[i, y_index] > 0:
 			offspring_set.append(i)
-		#else:
-		#	for j in range(y_index+1, i):
-		#		if func_mat[i, j] > 0 and j in offspring_set:
-		#			offspring_set.append(i)
+			child_set.append(i)
+		else:
+			for j in range(y_index+1, i):
+				if func_mat[i, j] > 0 and j in offspring_set:
+					offspring_set.append(i)
 
-	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set, offspring_set
+	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set, child_set, offspring_set
 
 
 def SCM_ex1():
@@ -238,4 +238,22 @@ def SCM_ex1():
 		AdditiveStructuralCausalModel(num_vars, coeff2, func_mat, y_index)
 	]
 	return models, np.array([1, 0], dtype=np.int), np.array([2, 0], dtype=np.float)
+
+
+def sample_from_SCM(models, n, index=0, shuffle=False):
+	xs, ys, yts = [], [], []
+	for i in range(len(models)):
+		x, y, yt = models[i].sample(n)
+		if shuffle:
+			xl = x[:, :index]
+			xr = x[:, index:]
+			arr = np.arange(n)
+			np.random.shuffle(arr)
+			xr = xr[arr, :]
+			x = np.concatenate([xl, xr], 1)
+		
+		xs.append(x)
+		ys.append(y)
+		yts.append(yt)
+	return xs, ys, yts
 

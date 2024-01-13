@@ -112,14 +112,17 @@ def causal_dantzig(x_list, y_list, true_para):
 	return np.squeeze(np.matmul(np.linalg.inv(g), z))
 
 def eills(x_list, y_list, true_para=None):
-	return brute_force(x_list, y_list, 20, loss_type='eills')
+	return brute_force(x_list, y_list, 36, loss_type='eills')
 
 def fair(x_list, y_list, true_para=None):
-	return brute_force(x_list, y_list, 20, loss_type='fair')
+	return brute_force(x_list, y_list, 36, loss_type='fair')
 
 def lse_s_star(x_list, y_list, true_para=None):
-	var_set = [0, 1, 2]
-	return broadcast(pooled_least_squares([x[:, var_set] for x in x_list], y_list), var_set, dim_x)
+	var_set = []
+	for i in range(np.shape(true_para)[0]):
+		if (np.abs(true_para[i]) > 1e-9):
+			var_set.append(i)
+	return broadcast(pooled_least_squares([x[:, var_set] for x in x_list], y_list), var_set, np.shape(true_para)[0])
 
 
 def lse_gc(x_list, y_list, true_para=None):
@@ -135,3 +138,16 @@ def eills_refit(x_list, y_list, true_para=None):
 			var_set.append(i)
 	return broadcast(pooled_least_squares([x[:, var_set] for x in x_list], y_list), var_set, dim_x)
 
+def lse_s_rd(x_list, y_list, true_para=None):
+	xs = []
+	index = np.shape(x_list[0])[1] // 2
+	for i in range(len(x_list)):
+		x = x_list[i]
+		xl = x[:, :index]
+		xr = x[:, index:]
+		arr = np.arange(np.shape(x)[0])
+		np.random.shuffle(arr)
+		xr = xr[arr, :]
+		x = np.concatenate([xl, xr], 1)
+		xs.append(x)
+	return pooled_least_squares(xs, y_list)
