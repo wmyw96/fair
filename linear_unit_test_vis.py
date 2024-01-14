@@ -9,7 +9,7 @@ plt.rcParams["font.family"] = "Times New Roman"
 plt.rc('font', size=20)
 rc('text', usetex=True)
 
-TEST_ID = 2
+TEST_ID = 1
 
 color_tuple = [
 	'#ae1908',  # red
@@ -21,7 +21,7 @@ color_tuple = [
 ]
 
 if TEST_ID == 1:
-	results = np.load('unit_test_1_r20.npy')
+	results = np.load('unit_test_1.npy')
 	dim_x = 12
 
 	env1_model = StructuralCausalModel1(dim_x + 1)
@@ -34,11 +34,13 @@ if TEST_ID == 1:
 	num_sml = results.shape[1]
 
 	vec_n = [100, 300, 700, 1000, 2000]
-	method_name = ['EILLS', "FAIR-BF", "FAIR-Gumbel", r"LS$_{S^\star}$", r"LS$_{G^c}$", "ERM"]
-	method_idx = [0, 1, 2, 3, 4, 7]
+	method_name = ['EILLS', "FAIR-BF", "FAIR-Gumbel", r"FAIR-Gumbel-RefitLS", r"FAIR-Gumbel-RefitAdv", r"LS$_{S^\star}$", r"LS$_{G^c}$", "ERM"]
+	method_idx = [0, 1, 2, 9, 8, 3, 4, 7]
 
 	lines = [
 		'dashed',
+		'solid',
+		'solid',
 		'solid',
 		'solid',
 		'dotted',
@@ -50,6 +52,8 @@ if TEST_ID == 1:
 		'P',
 		'o',
 		'D',
+		'P',
+		'o',
 		's',
 		'x',
 		'<'
@@ -58,6 +62,8 @@ if TEST_ID == 1:
 	colors = [
 		'#05348b',
 		'#6bb392',
+		'#ae1908',
+		'#ae1908',
 		'#ae1908',
 		'#ec813b',
 		'#e5a84b',

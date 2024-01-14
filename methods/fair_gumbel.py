@@ -156,7 +156,7 @@ def sigmoid(x):
 			the numpy array
 			
 	'''
-	return 1/(1+np.exp(-x))
+	return 1/(1+np.exp(-np.minimum(np.maximum(x, -30), 30)))
 
 
 class GumbelGate(torch.nn.Module):

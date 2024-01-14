@@ -70,7 +70,7 @@ print(var_set)
 beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, args.dim_x)
 
 refit_packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, 
-							niters=niters, batch_size=args.batch_size, init_temp=args.init_temp,
+							niters=5000, batch_size=args.batch_size, init_temp=args.init_temp,
 							final_temp=args.final_temp, log=args.log, mask=mask*1.0)
 beta2 = refit_packs['weight']
 

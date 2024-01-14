@@ -7,7 +7,7 @@ import time
 from eills_demo_script.demo_wrapper import *
 from utils import get_linear_SCM
 
-TEST_ID = 1
+TEST_ID = 3
 
 ###############################################################
 #
@@ -32,7 +32,7 @@ if TEST_ID == 1:
 		set_lse
 	]
 
-	num_repeats = 1
+	num_repeats = 50
 
 	np.random.seed(0)
 
@@ -80,7 +80,7 @@ if TEST_ID == 1:
 					beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, dim_x)
 
 					refit_packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=36, learning_rate=1e-3, 
-														niters=50000, batch_size=32, init_temp=0.5,
+														niters=5000, batch_size=32, init_temp=0.5,
 														final_temp=0.005, log=False, mask=mask*1.0)
 					beta2 = refit_packs['weight']
 
@@ -126,7 +126,7 @@ if TEST_ID == 2:
 		erm
 	]
 
-	result = np.zeros((len(candidate_n), num_repeats, len(methods) + 1, 15))
+	result = np.zeros((len(candidate_n), num_repeats, len(methods) + 3, 15))
 
 	for (ni, n) in enumerate(candidate_n):
 		for t in range(num_repeats):
@@ -148,11 +148,31 @@ if TEST_ID == 2:
 				ys.append(y)
 
 			for mid, method in enumerate(methods):
-				#print(mid)
-				beta = method(xs, ys, true_coeff)
-				#print(beta)
-				# restore the estimated coeffs
-				result[ni, t, mid + 1, :] = beta
+				if mid == 2:
+					packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=36, learning_rate=1e-3, 
+												niters=50000, batch_size=32, init_temp=0.5,
+												final_temp=0.005, log=False)
+					beta = packs['weight']
+					mask = packs['gate_rec'][-1] > 0.9
+
+					# Refit using LS
+					full_var = (np.arange(15))
+					var_set = full_var[mask].tolist()
+					beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, 15)
+
+					refit_packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=36, learning_rate=1e-3, 
+														niters=10000, batch_size=32, init_temp=0.5,
+														final_temp=0.005, log=False, mask=mask*1.0)
+					beta2 = refit_packs['weight']
+
+					result[ni, t, mid, :] = beta
+					result[ni, t, len(methods) + 1, :] = beta2
+					result[ni, t, len(methods) + 2, :] = beta3
+				else:
+					beta = method(xs, ys, true_coeff)
+
+					# restore the estimated coeffs
+					result[ni, t, mid + 1, :] = beta
 			end_time = time.time()
 			print(f'Running Case: n = {n}, t = {t}, secs = {end_time - start_time}s')
 
@@ -164,7 +184,7 @@ if TEST_ID == 2:
 if TEST_ID == 3:
 	candidate_n = [500, 1000, 2000, 5000, 10000]
 
-	num_repeats = 50
+	num_repeats = 1
 
 	np.random.seed(0)
 
@@ -181,7 +201,7 @@ if TEST_ID == 3:
 		erm
 	]
 
-	result = np.zeros((len(candidate_n), num_repeats, len(methods) + 1, 70))
+	result = np.zeros((len(candidate_n), num_repeats, len(methods) + 3, 70))
 
 	for (ni, n) in enumerate(candidate_n):
 		for t in range(num_repeats):
@@ -203,11 +223,31 @@ if TEST_ID == 3:
 				ys.append(y)
 
 			for mid, method in enumerate(methods):
-				#print(mid)
-				beta = method(xs, ys, true_coeff)
-				#print(beta)
-				# restore the estimated coeffs
-				result[ni, t, mid + 1, :] = beta
+				if mid == 0:
+					packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=36, learning_rate=1e-3, 
+												niters=50000, batch_size=32, init_temp=0.5,
+												final_temp=0.005, log=False)
+					beta = packs['weight']
+					mask = packs['gate_rec'][-1] > 0.9
+
+					# Refit using LS
+					full_var = (np.arange(70))
+					var_set = full_var[mask].tolist()
+					beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, 70)
+
+					refit_packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=36, learning_rate=1e-3, 
+														niters=10000, batch_size=32, init_temp=0.5,
+														final_temp=0.005, log=False, mask=mask*1.0)
+					beta2 = refit_packs['weight']
+
+					result[ni, t, mid, :] = beta
+					result[ni, t, len(methods) + 1, :] = beta2
+					result[ni, t, len(methods) + 2, :] = beta3
+				else:
+					beta = method(xs, ys, true_coeff)
+
+					result[ni, t, mid + 1, :] = beta
+				
 				print(f'method {mid}, l2 error = {np.sum(np.square(true_coeff - beta))}')
 			end_time = time.time()
 			print(f'Running Case: n = {n}, t = {t}, secs = {end_time - start_time}s')
