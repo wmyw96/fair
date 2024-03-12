@@ -165,7 +165,7 @@ if TEST_ID == 2:
 														final_temp=0.005, log=False, mask=mask*1.0)
 					beta2 = refit_packs['weight']
 
-					result[ni, t, mid, :] = beta
+					result[ni, t, mid + 1, :] = beta
 					result[ni, t, len(methods) + 1, :] = beta2
 					result[ni, t, len(methods) + 2, :] = beta3
 				else:
@@ -240,7 +240,7 @@ if TEST_ID == 3:
 														final_temp=0.005, log=False, mask=mask*1.0)
 					beta2 = refit_packs['weight']
 
-					result[ni, t, mid, :] = beta
+					result[ni, t, mid + 1, :] = beta
 					result[ni, t, len(methods) + 1, :] = beta2
 					result[ni, t, len(methods) + 2, :] = beta3
 				else:

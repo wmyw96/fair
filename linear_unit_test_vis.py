@@ -4,12 +4,13 @@ from matplotlib import rc
 from numpy import genfromtxt
 from data.model import *
 from eills_demo_script.demo_wrapper import *
+from utils import *
 
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rc('font', size=20)
 rc('text', usetex=True)
 
-TEST_ID = 1
+TEST_ID = 2
 
 color_tuple = [
 	'#ae1908',  # red
@@ -103,17 +104,19 @@ if TEST_ID == 1:
 	plt.savefig("l2_error.pdf")
 
 if TEST_ID == 2:
-	results = np.load('unit_test_2_r50.npy')
+	results = np.load('unit_test_2.npy')
 
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
 	vec_n = [100, 300, 700, 1000, 2000]
-	method_name = ['EILLS', "FAIR-BF", "FAIR-Gumbel", "Oracle", r"IRM", r"Anchor", "ERM"]
-	method_idx = [0, 1, 2, 3, 4, 5, 6]
+	method_name = ['EILLS', "FAIR-BF", "FAIR-Gumbel", r"FAIR-Gumbel-RefitLS", r"FAIR-Gumbel-RefitAdv", "Oracle", r"IRM", r"Anchor", "ERM"]
+	method_idx = [0, 1, 2, 8, 7, 3, 4, 5, 6]
 
 	lines = [
 		'dashed',
+		'solid',
+		'solid',
 		'solid',
 		'solid',
 		'dashed',
@@ -126,6 +129,8 @@ if TEST_ID == 2:
 		'P',
 		'o',
 		'D',
+		'P',
+		'+',
 		'*',
 		's',
 		'x',
@@ -134,6 +139,8 @@ if TEST_ID == 2:
 
 	colors = [
 		'#6bb392',
+		'#05348b',
+		'#05348b',
 		'#05348b',
 		'#05348b',
 		'#ae1908',
@@ -152,13 +159,8 @@ if TEST_ID == 2:
 		for i in range(len(vec_n)):
 			measures = []
 			for k in range(num_sml):
-				#if mid == 3 and i == 4:
-				#	print(results[i, k, mid+1, :])
-				#if mid == 3:
-				#	measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])) * 3)
-				#else:
 				measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
-			metric.append(np.median(measures))
+			metric.append(np.mean(measures))
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
 	plt.xticks(fontsize=12)
@@ -173,16 +175,18 @@ if TEST_ID == 2:
 
 
 if TEST_ID == 3:
-	results = np.load('unit_test_3_r50.npy')
+	results = np.load('unit_test_3.npy')
 
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
 	vec_n = [500, 1000, 2000, 5000, 10000]
-	method_name = ["FAIR-Gumbel", "Oracle", r"Semi-Oracle", "ERM"]
-	method_idx = [0, 1, 2, 3]
+	method_name = ["FAIR-Gumbel", "FAIR-G-RefitLS", "FAIR-G-RefitAdv", "Oracle", r"Semi-Oracle", "ERM"]
+	method_idx = [0, 5, 4, 1, 2, 3]
 
 	lines = [
+		'solid',
+		'solid',
 		'solid',
 		'dashed',
 		'dashed',
@@ -191,6 +195,8 @@ if TEST_ID == 3:
 
 	markers = [
 		'D',
+		'+',
+		'o',
 		'P',
 		'*',
 		'x',
@@ -198,15 +204,28 @@ if TEST_ID == 3:
 
 	colors = [
 		'#05348b',
+		'#9acdc4',
+		'#6bb392',
 		'#ae1908',
 		'#ec813b',
-		'#9acdc4'
+		'#e5a84b'
 	]
 
 	fig = plt.figure(figsize=(8, 6))
 	ax1 = fig.add_subplot(111)
 	plt.subplots_adjust(top=0.98, bottom=0.1, left=0.17, right=0.98)
 	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$")
+
+	'''true_coeffs = np.zeros((num_sml, 70))
+	for k in range(num_sml):
+		np.random.seed(k)
+		print(f'graph {k}')
+		#generate random graph with 20 nodes
+		models, true_coeff, parent_set, child_set, offspring_set = \
+			get_linear_SCM(num_vars=71, num_envs=2, y_index=35, 
+							min_child=5, min_parent=5, nonlinear_id=5, 
+							bias_greater_than=0.5, log=False)
+		true_coeffs[k, :] = true_coeff'''
 
 	for (j, mid) in enumerate(method_idx):
 		metric = []
@@ -216,9 +235,9 @@ if TEST_ID == 3:
 				#if mid == 3 and i == 4:
 				#	print(results[i, k, mid+1, :])
 				measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
-				if mid == 0:
+				if mid+1 == 0:
 					print(vec_n[i], np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
-			metric.append(np.mean(measures))
+			metric.append(np.median(measures))
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
 	plt.xticks(fontsize=12)

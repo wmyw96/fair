@@ -112,6 +112,10 @@ class FairNeuralNetwork(torch.nn.Module):
 		self.out_act = out_act
 
 
+	def standardize(self, train_x):
+		self.x_mean = torch.tensor(np.mean(train_x, 0, keepdims=True)).float()
+		self.x_std = torch.tensor(np.std(train_x, 0, keepdims=True)).float()
+
 	def forward(self, x):
 		'''
 			Parameters
@@ -124,6 +128,7 @@ class FairNeuralNetwork(torch.nn.Module):
 			out : torch.tensor
 				(n, 1) matrix of the prediction
 		'''
+		x = (x - self.x_mean) / self.x_std
 		out = self.relu_stack(x)
 		if self.res_connect:
 			out = out + self.linear_res(x)
@@ -388,8 +393,183 @@ def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, 
 	return ret
 
 
-def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamma=10, depth=1, width=64,
-						learning_rate=1e-3, niters=50000, niters_d=5, niters_g=1, gate_samples=20,
+def ho_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=1, niters_g=1, 
+						batch_size=32, mask=None, init_temp=0.5, final_temp=0.005, iter_save=100, log=False):
+	'''
+		Implementation of FAIR-LL estimator with gumbel discrete approximation
+
+		Parameter
+		----------
+		features : list 
+			list of numpy matrices with shape (n_k, p) representing the explanatory variables
+		responses : list
+			list of numpy matrices with shape (n_k, 1) representing the response variable
+		hyper_gamma : float
+			hyper-parameter gamma control the degree of invariance
+		learning_rate : float
+			learning rate for stochastic gradient descent
+		niters : int
+			number of outer iterations
+		niters_d : int
+			number of inner iterations for discriminator
+		niters_g : int
+			number of inner iterations for generator
+		batch_size : int
+			batch_size for stochastic gradient descent
+		init_temp : float
+			initial temperature for gumbel approximation
+		final_temp: float
+			final temperature for gumbel approximation
+		log : bool
+			whether to show logs during training
+
+		Returns
+		----------
+		a dict collecting things of interests
+	'''
+	num_envs = len(features)
+	dim_x = np.shape(features[0])[1]
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+	if log:
+		print(f'================================================================================')
+		print(f'================================================================================')
+		print(f'==')
+		print(f'==  FAIR Linear/Linear (DO) Model Gumbel: num of envs = {num_envs}, x dim = {dim_x}')
+		print(f'==')
+		print(f'================================================================================')
+		print(f'================================================================================')
+
+	# build the gumbel gate
+	use_gumbel = False
+	if mask is None:
+		fairll_var = GumbelGate(dim_x, device)
+		optimizer_var = optim.Adam(fairll_var.parameters(), lr=1e-3)
+		use_gumbel = True
+	else:
+		print(f'use fixed mask: {mask}')
+		fairll_var = FixedGate(dim_x, mask, device)
+
+	# build predictor class G
+	fairll_g = FairLinearModel(dim_x).to(device)
+	optimizer_g = optim.Adam(fairll_g.parameters(), lr=learning_rate)
+	fairll_g.standardize(np.concatenate(features, 0))
+	
+	# build discriminator class F in |E| environments
+	fairll_ds = []
+	optimizer_ds = []
+	for e in range(num_envs):
+		fairll_d = FairLinearModel(dim_x).to(device)
+		fairll_d.standardize(features[e])
+		optimizer_d = optim.Adam(fairll_d.parameters(), lr=learning_rate)
+		fairll_ds.append(fairll_d)
+		optimizer_ds.append(optimizer_d)
+
+	# construct dataset from numpy array
+	train_datasets = []
+	train_loaders = []
+	sample_size = 1e9
+	for e in range(num_envs):
+		sample_size = min(sample_size, np.shape(responses[e])[0])
+		train_dataset = torch.utils.data.TensorDataset(torch.tensor(features[e]).float(), torch.tensor(responses[e]).float())
+		train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
+		train_loaders.append(train_loader)
+		train_datasets.append(train_dataset)
+
+	gate_rec = []
+	weight_rec = []
+	loss_rec = []
+	# start training
+	if log:
+		it_gen = tqdm(range(niters))
+	else:
+		it_gen = range(niters)
+
+	print(sample_size)
+	lda_weight = np.log(dim_x) / sample_size * 0
+
+	for it in it_gen:
+		# calculate the temperature
+		tau = max(init_temp, final_temp * np.exp(-(1/niters) * it))
+		tau_logits = 1
+
+		# train the discriminator
+		for i in range(niters_d):
+			for e in range(num_envs):
+				optimizer_ds[e].zero_grad()
+
+				feature_e, label_e = next(iter(train_loaders[e]))
+				feature_e = feature_e.to(device)
+				label_e = label_e.to(device)
+
+				gate = fairll_var.generate_mask((tau_logits, tau))
+				print(gate.shape, feature_e.shape)
+				out_de = fairll_ds[e](gate * feature_e)
+
+				loss_de = torch.mean(0.5 * (out_de - label_e) * (out_de - label_e))
+				loss_de.backward()
+				optimizer_ds[e].step()
+
+		my_loss = np.zeros((niters_g, 2))
+
+		# train the generator
+		for i in range(niters_g):
+			loss_r = 0
+			loss_j = 0
+			# set the gradient to be zero
+			optimizer_g.zero_grad()
+			if use_gumbel:
+				optimizer_var.zero_grad()
+
+			# generate the same mask for all the environment
+			gate = fairll_var.generate_mask((tau_logits, tau))
+
+			for e in range(num_envs):
+				optimizer_ds[e].zero_grad()
+				
+				feature_e, label_e = next(iter(train_loaders[e]))
+				feature_e = feature_e.to(device)
+				label_e = label_e.to(device)
+
+				out_g = fairll_g(gate * feature_e)
+				out_de = fairll_ds[e](gate * feature_e)
+				residual = (out_g - label_e)
+
+				loss_r += 0.5 * torch.mean(residual ** 2)
+				loss_j += torch.mean(0.5 * (out_g - out_de) * (out_g - out_de))
+			loss = loss_r + hyper_gamma * loss_j + lda_weight * torch.sum(torch.tanh(torch.sigmoid(fairll_var.logits) / tau))
+			loss.backward()
+			my_loss[i, 0], my_loss[i, 1] = loss_r.item(), loss_j.item()
+
+			optimizer_g.step()
+			if use_gumbel:
+				optimizer_var.step()
+
+		# save the weight/logits for linear model
+		if it % iter_save == 0:
+			with torch.no_grad():
+				weight = fairll_g.linear.weight.detach().cpu() / np.squeeze(fairll_g.x_std.numpy())
+				logits = fairll_var.get_logits_numpy()
+				gate_rec.append(sigmoid(logits / tau))
+				weight_rec.append(np.squeeze(weight.numpy() + 0.0))
+			loss_rec.append(np.mean(my_loss, 0))
+
+
+	ret = {'weight': weight_rec[-1] * sigmoid(logits / tau_logits),
+			'weight_rec': np.array(weight_rec),
+			'gate_rec': np.array(gate_rec),
+			'fair_g': fairll_g,
+			'fair_ds': fairll_ds,
+			'fair_var': fairll_var,
+			'loss_rec': np.array(loss_rec)}
+
+	return ret
+
+
+
+
+def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamma=10, depth=2, width=64,
+						learning_rate=1e-3, niters=50000, niters_d=3, niters_g=2, gate_samples=20,
 						batch_size=32, init_temp=0.5, final_temp=0.005, eval_iter=3000, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation
@@ -430,6 +610,8 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 	num_envs = len(features)
 	dim_x = np.shape(features[0])[1]
 
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 	if log:
 		print(f'================================================================================')
 		print(f'================================================================================')
@@ -440,18 +622,20 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 		print(f'================================================================================')
 
 	# build the gumbel gate
-	fairnn_var = GumbelGate(dim_x)
+	fairnn_var = GumbelGate(dim_x, device)
 	optimizer_var = optim.Adam(fairnn_var.parameters(), lr=learning_rate)
 
 	# build predictor class G
-	fairnn_g = FairNeuralNetwork(dim_x, depth, width, res_connect=True)
+	fairnn_g = FairNeuralNetwork(dim_x, depth - 2, width, res_connect=True).to(device)
 	optimizer_g = optim.Adam(fairnn_g.parameters(), lr=learning_rate)
-	
+	fairnn_g.standardize(np.concatenate(features, 0))
+
 	# build discriminator class F in |E| environments
 	fairnn_ds = []
 	optimizer_ds = []
 	for e in range(num_envs):
-		fairnn_d = FairNeuralNetwork(dim_x, depth, 2*width, res_connect=True)
+		fairnn_d = FairNeuralNetwork(dim_x, depth, 2*width, res_connect=True).to(device)
+		fairnn_d.standardize(features[e])
 		optimizer_d = optim.Adam(fairnn_d.parameters(), lr=learning_rate)
 		fairnn_ds.append(fairnn_d)
 		optimizer_ds.append(optimizer_d)
@@ -459,7 +643,9 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 	# construct dataset from numpy array
 	train_datasets = []
 	train_loaders = []
+	sample_size = 1e9
 	for e in range(num_envs):
+		sample_size = min(sample_size, np.shape(responses[e])[0])
 		train_dataset = torch.utils.data.TensorDataset(torch.tensor(features[e]).float(), torch.tensor(responses[e]).float())
 		train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
 		train_loaders.append(train_loader)
@@ -470,25 +656,29 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 
 	gate_rec = []
 	# start training
-	#if log:
-	#	it_gen = tqdm(range(niters))
-	#else:
-	#	it_gen = range(niters)
+	if log:
+		it_gen = tqdm(range(niters))
+	else:
+		it_gen = range(niters)
 
-	for it in range(niters):
+	print(f'sample size = {sample_size}')
+	lda_weight = np.log(dim_x) / sample_size * 0.
+
+	for it in it_gen:
 		# calculate the temperature
 		tau = max(init_temp, final_temp * np.exp(-(1/niters) * it))
+		tau_logits = 1
 
 		if it % eval_iter == 0:
 			# save the logits
 			with torch.no_grad():
 				logits = fairnn_var.logits.detach().cpu()
-				gate_rec.append(sigmoid(logits.numpy() / tau))
+				gate_rec.append(sigmoid(logits.numpy()))
 
 			# calculate valid loss
 			preds = []
 			for k in range(gate_samples):
-				gate = fairnn_var.generate_mask(tau)
+				gate = fairnn_var.generate_mask((tau_logits, tau))
 				pred = fairnn_g(gate * valid_x)
 				preds.append(pred.detach().cpu().numpy())
 			out = sum(preds) / len(preds)
@@ -498,7 +688,7 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 			preds = []
 			gates = []
 			for k in range(gate_samples):
-				gate = fairnn_var.generate_mask(tau)
+				gate = fairnn_var.generate_mask((tau_logits, tau))
 				pred = fairnn_g(gate * test_x)
 				preds.append(pred.detach().cpu().numpy())
 				gates.append((gate).detach().cpu().numpy() + 0.0)
@@ -514,7 +704,7 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 				optimizer_ds[e].zero_grad()
 				feature_e, label_e = next(iter(train_loaders[e]))
 
-				gate = fairnn_var.generate_mask(tau)
+				gate = fairnn_var.generate_mask((tau_logits, tau))
 				out_g = fairnn_g(gate * feature_e)
 				out_de = fairnn_ds[e](gate * feature_e)
 				loss_de = - torch.mean((label_e - out_g) * out_de - 0.5 * out_de * out_de)
@@ -523,23 +713,29 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 
 		# train the generator
 		for i in range(niters_g):
-			loss = 0
+			loss_r = 0
+			loss_j = 0
 			# set the gradient to be zero
 			optimizer_g.zero_grad()
 			optimizer_var.zero_grad()
 
 			# generate the same mask for all the environment
-			gate = fairnn_var.generate_mask(tau)
+			gate = fairnn_var.generate_mask((tau_logits, tau))
 
 			for e in range(num_envs):
 				optimizer_ds[e].zero_grad()
+				
 				feature_e, label_e = next(iter(train_loaders[e]))
+				feature_e = feature_e.to(device)
+				label_e = label_e.to(device)
+
 				out_g = fairnn_g(gate * feature_e)
 				out_de = fairnn_ds[e](gate * feature_e)
 				residual = (out_g - label_e)
 
-				loss += 0.5 * torch.mean(residual ** 2)
-				loss += hyper_gamma * torch.mean((label_e - out_g) * out_de - 0.5 * out_de * out_de)
+				loss_r += 0.5 * torch.mean(residual ** 2)
+				loss_j += torch.mean((label_e - out_g) * out_de - 0.5 * out_de * out_de)
+			loss = loss_r + hyper_gamma * loss_j + lda_weight * torch.sum(torch.tanh(torch.sigmoid(fairnn_var.logits) / tau))
 			loss.backward()
 
 			optimizer_g.step()

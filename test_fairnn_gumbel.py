@@ -55,7 +55,7 @@ if test_mode == 3:
 xs, ys, yts = sample_from_SCM(models, args.n)
 
 xvs, yvs, yvts = sample_from_SCM(models, args.n // 7 * 3, index=args.dim_x // 2, shuffle=True)
-xts, yts, ytts = sample_from_SCM(models, args.n * 10)
+xts, yts, ytts = sample_from_SCM(models, args.n)
 
 valid_x, valid_y = np.concatenate(xvs, 0), np.concatenate(yvs, 0)
 test_x, test_y = np.concatenate(xts, 0), np.concatenate(ytts, 0)
