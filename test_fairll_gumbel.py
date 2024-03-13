@@ -28,31 +28,33 @@ parser.add_argument("--lr", help="learning rate", type=float, default=1e-3)
 parser.add_argument("--min_child", help="min number of children", type=int, default=5)
 parser.add_argument("--min_parent", help="min number of parents", type=int, default=5)
 parser.add_argument("--lsbias", help="least square bias", type=float, default=0.5)
-parser.add_argument('--init_temp', help='initial temperature', type=float, default=0.5)
-parser.add_argument('--final_temp', help='final temperature', type=float, default=0.001)
+parser.add_argument('--init_temp', help='initial temperature', type=float, default=5)
+parser.add_argument('--final_temp', help='final temperature', type=float, default=0.1)
 parser.add_argument('--gamma', help='hyper parameter gamma', type=float, default=36)
 parser.add_argument("--record_dir", help="record directory", type=str, default="logs/")
 parser.add_argument("--log", help="show log", type=bool, default=True)
 
 args = parser.parse_args()
+dim_x = args.dim_x
 
-exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{args.dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
+exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
 exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
 
 np.random.seed(args.seed)
 
-#models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
-#parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
+parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
 
 # generate data
 
 models, true_coeff, parent_set, child_set, offspring_set = \
-	get_linear_SCM(num_vars=args.dim_x + 1, num_envs=args.num_envs, y_index=args.dim_x // 2, 
+	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
 
 print(parent_set, child_set)
 xs, ys, yts = sample_from_SCM(models, args.n)
+
 
 # FAIR Gumbel algorithm
 niters = args.niters
@@ -64,10 +66,10 @@ beta = packs['weight']
 mask = packs['gate_rec'][-1] > 0.9
 
 # Refit using LS
-full_var = (np.arange(args.dim_x))
+full_var = (np.arange(dim_x))
 var_set = full_var[mask].tolist()
 print(var_set)
-beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, args.dim_x)
+beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, dim_x)
 
 refit_packs = fair_ll_sgd_gumbel(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, 
 							niters=5000, batch_size=args.batch_size, init_temp=args.init_temp,
@@ -84,7 +86,7 @@ if args.log:
 
 '''
 rsp = []
-for i in range(args.dim_x):
+for i in range(dim_x):
 	if i in parent_set:
 		rsp.append(2)
 	elif i in child_set:
@@ -96,10 +98,10 @@ for i in range(args.dim_x):
 rsp = np.array(rsp)
 
 saved_its = np.shape(packs['weight_rec'])[0]
-result = np.zeros((saved_its + 2, args.dim_x * 2))
+result = np.zeros((saved_its + 2, dim_x * 2))
 result[0, :] = np.concatenate([true_coeff, rsp])
 result[2:, :] = np.concatenate([packs['weight_rec'], packs['gate_rec']], 1)
-result[1, :args.dim_x] = np.squeeze(pooled_least_squares(xs, ys))
+result[1, :dim_x] = np.squeeze(pooled_least_squares(xs, ys))
 
 if len(args.record_dir) > 0:
 	save_path = os.path.join(args.record_dir, exp_name + '.csv')
@@ -130,7 +132,7 @@ color_tuple = [
 ]
 
 rsp = []
-for i in range(args.dim_x):
+for i in range(dim_x):
 	if i in parent_set:
 		rsp.append(2)
 	elif i in child_set:
@@ -154,7 +156,7 @@ ax4 = plt.subplot(2, 2, 4)
 it_display = niters // 100
 it_arr = np.arange(it_display)
 
-for i in range(args.dim_x):
+for i in range(dim_x):
 	ax1.plot(it_arr, gate[:it_display, i], color=color_tuple[rsp[i]])
 	ax2.plot(it_arr, para[:it_display, i] * gate[:it_display, i], color=color_tuple[rsp[i]])
 ax1.set_xlabel('iters (100)')
