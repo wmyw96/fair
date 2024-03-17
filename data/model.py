@@ -237,7 +237,7 @@ def SCM_ex1():
 		AdditiveStructuralCausalModel(num_vars, coeff1, func_mat, y_index),
 		AdditiveStructuralCausalModel(num_vars, coeff2, func_mat, y_index)
 	]
-	return models, np.array([1, 0], dtype=np.int), np.array([2, 0], dtype=np.float)
+	return models, np.array([2, 0], dtype=np.float)
 
 
 def sample_from_SCM(models, n, index=0, shuffle=False):

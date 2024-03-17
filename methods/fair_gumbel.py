@@ -220,7 +220,7 @@ class FixedGate(torch.nn.Module):
 		return self.logits.detach().cpu().numpy()
 
 
-def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=2, niters_g=1, 
+def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=10, niters_g=1, 
 						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, iter_save=100, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation
@@ -312,21 +312,21 @@ def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, 
 	else:
 		it_gen = range(niters)
 
-	print(sample_size)
 	lda_weight = np.log(dim_x) / sample_size * 0
 
 	anneal_rate = (final_temp / init_temp)
-	print(anneal_rate)
 	for it in it_gen:
 		# calculate the temperature
 		tau = max(final_temp, init_temp * (anneal_rate ** ((it + 0.0) / niters)))
 		if it % 10000 == 0:
-			print(tau)
+			print(f'annealed tau: {tau}')
 		#print(tau)
 		tau_logits = 1
 
 		# train the discriminator
 		for i in range(niters_d):
+			gate = fairll_var.generate_mask((tau_logits, tau)).detach()
+
 			for e in range(num_envs):
 				optimizer_ds[e].zero_grad()
 
@@ -334,8 +334,7 @@ def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, 
 				feature_e = feature_e.to(device)
 				label_e = label_e.to(device)
 
-				gate = fairll_var.generate_mask((tau_logits, tau))
-				out_g = fairll_g(gate * feature_e)
+				out_g = (fairll_g(gate * feature_e)).detach()
 				out_de = fairll_ds[e](gate * feature_e)
 
 				loss_de = - torch.mean((label_e - out_g) * out_de - 0.5 * out_de * out_de)
@@ -384,7 +383,7 @@ def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, 
 				logits = fairll_var.get_logits_numpy()
 				gate_rec.append(sigmoid(logits / tau))
 				weight_rec.append(np.squeeze(weight.numpy() + 0.0))
-			#print(sigmoid(logits / tau), np.squeeze(weight.numpy() + 0.0))
+			print(logits, np.squeeze(weight.numpy() + 0.0))
 			loss_rec.append(np.mean(my_loss, 0))
 
 
@@ -400,8 +399,8 @@ def fair_ll_sgd_gumbel(features, responses, hyper_gamma=10, learning_rate=1e-3, 
 
 
 
-def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamma=10, depth=1, width=64,
-						learning_rate=1e-3, niters=50000, niters_d=2, niters_g=1, gate_samples=20,
+def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamma=10, depth=1, width=16,
+						learning_rate=1e-3, niters=50000, niters_d=3, niters_g=1, gate_samples=20,
 						batch_size=32, init_temp=0.5, final_temp=0.005, eval_iter=3000, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation
@@ -458,7 +457,7 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 	optimizer_var = optim.Adam(fairnn_var.parameters(), lr=learning_rate)
 
 	# build predictor class G
-	fairnn_g = FairNeuralNetwork(dim_x, depth, width, res_connect=True).to(device)
+	fairnn_g = FairNeuralNetwork(dim_x, depth-1, width, res_connect=True).to(device)
 	optimizer_g = optim.Adam(fairnn_g.parameters(), lr=learning_rate)
 	fairnn_g.standardize(np.concatenate(features, 0))
 
@@ -468,7 +467,7 @@ def fair_nn_gumbel_regression(features, responses, validset, testset, hyper_gamm
 	for e in range(num_envs):
 		fairnn_d = FairNeuralNetwork(dim_x, depth, width, res_connect=True).to(device)
 		fairnn_d.standardize(features[e])
-		optimizer_d = optim.Adam(fairnn_d.parameters(), lr=learning_rate, weight_decay=1e-5)
+		optimizer_d = optim.Adam(fairnn_d.parameters(), lr=learning_rate, weight_decay=1e-3)
 		fairnn_ds.append(fairnn_d)
 		optimizer_ds.append(optimizer_d)
 

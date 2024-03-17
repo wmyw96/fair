@@ -35,26 +35,34 @@ parser.add_argument("--record_dir", help="record directory", type=str, default="
 parser.add_argument("--log", help="show log", type=bool, default=True)
 
 args = parser.parse_args()
-dim_x = args.dim_x
-
-exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
-exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
 
 np.random.seed(args.seed)
 
-models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
-parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+TEST_MODE = 1
 
-# generate data
-
-models, true_coeff, parent_set, child_set, offspring_set = \
+# Set data generating process
+if TEST_MODE == 1:
+	dim_x = 2
+	models, true_coeff = SCM_ex1()
+	parent_set, child_set, offspring_set = [0], [1], [1]
+elif TEST_MODE == 2:
+	dim_x = 12
+	models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
+	parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+elif TEST_MODE == 3:
+	dim_x = args.dim_x
+	models, true_coeff, parent_set, child_set, offspring_set = \
 	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
 
+# set saving dir
+exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
+exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
+
+# generate data
 print(parent_set, child_set)
 xs, ys, yts = sample_from_SCM(models, args.n)
-
 
 # FAIR Gumbel algorithm
 niters = args.niters

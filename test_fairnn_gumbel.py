@@ -36,7 +36,7 @@ test_mode = 2
 
 # Unit test 1: two node graph
 if test_mode == 1:
-	models, true_coeff, _ = SCM_ex1()
+	models, true_coeff = SCM_ex1()
 
 # Unit test 2: EILLS unit test
 if test_mode == 2:

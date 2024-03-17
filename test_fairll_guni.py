@@ -1,6 +1,6 @@
 from data.model import *
 from methods.brute_force import brute_force
-from methods.fair_gumbel import ho_ll_sgd_gumbel
+from methods.fair_gumbel_one import fair_ll_sgd_gumbel_uni
 from methods.tools import pooled_least_squares
 from utils import *
 import numpy as np
@@ -28,37 +28,45 @@ parser.add_argument("--lr", help="learning rate", type=float, default=1e-3)
 parser.add_argument("--min_child", help="min number of children", type=int, default=5)
 parser.add_argument("--min_parent", help="min number of parents", type=int, default=5)
 parser.add_argument("--lsbias", help="least square bias", type=float, default=0.5)
-parser.add_argument('--init_temp', help='initial temperature', type=float, default=0.5)
-parser.add_argument('--final_temp', help='final temperature', type=float, default=0.001)
+parser.add_argument('--init_temp', help='initial temperature', type=float, default=5)
+parser.add_argument('--final_temp', help='final temperature', type=float, default=0.1)
 parser.add_argument('--gamma', help='hyper parameter gamma', type=float, default=36)
 parser.add_argument("--record_dir", help="record directory", type=str, default="logs/")
 parser.add_argument("--log", help="show log", type=bool, default=True)
 
 args = parser.parse_args()
 
-exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{args.dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
-exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
-
 np.random.seed(args.seed)
 
-models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
-parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+TEST_MODE = 1
 
-dim_x = 12
+# Set data generating process
+if TEST_MODE == 1:
+	dim_x = 2
+	models, true_coeff = SCM_ex1()
+	parent_set, child_set, offspring_set = [0], [1], [1]
+elif TEST_MODE == 2:
+	dim_x = 12
+	models, true_coeff = [StructuralCausalModel1(13), StructuralCausalModel2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
+	parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+elif TEST_MODE == 3:
+	dim_x = args.dim_x
+	models, true_coeff, parent_set, child_set, offspring_set = \
+	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
+					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
+					bias_greater_than=args.lsbias, log=args.log)
+
+# set saving dir
+exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
+exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
+
 # generate data
-
-#models, true_coeff, parent_set, child_set, offspring_set = \
-#	get_linear_SCM(num_vars=args.dim_x + 1, num_envs=args.num_envs, y_index=args.dim_x // 2, 
-#					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
-#					bias_greater_than=args.lsbias, log=args.log)
-#dim_x = args.dim_x
-
 print(parent_set, child_set)
 xs, ys, yts = sample_from_SCM(models, args.n)
 
 # FAIR Gumbel algorithm
 niters = args.niters
-packs = ho_ll_sgd_gumbel(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, 
+packs = fair_ll_sgd_gumbel_uni(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, 
 							niters=niters, batch_size=args.batch_size, init_temp=args.init_temp,
 							final_temp=args.final_temp, log=args.log)
 
@@ -71,18 +79,37 @@ var_set = full_var[mask].tolist()
 print(var_set)
 beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, dim_x)
 
-refit_packs = ho_ll_sgd_gumbel(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, 
-							niters=niters, batch_size=args.batch_size, init_temp=args.init_temp,
-							final_temp=args.final_temp, log=args.log, mask=mask*1.0)
-beta2 = refit_packs['weight']
 
 if args.log:
 	print(f'True coefficient {true_coeff},')
 	print(f'Selected variables {np.where(mask)}')
 	print(f'FAIR SGD L2 error = {np.sum(np.square(beta - true_coeff))}')
-	print(f'FAIR SGD (Adversarial Refitted) L2 error = {np.sum(np.square(beta2 - true_coeff))}')
-	print(beta2)
 	print(f'FAIR SGD (LS Refitted) L2 error = {np.sum(np.square(beta3 - true_coeff))}')
+
+
+'''
+rsp = []
+for i in range(dim_x):
+	if i in parent_set:
+		rsp.append(2)
+	elif i in child_set:
+		rsp.append(0)
+	elif i in offspring_set:
+		rsp.append(1)
+	else:
+		rsp.append(3)
+rsp = np.array(rsp)
+
+saved_its = np.shape(packs['weight_rec'])[0]
+result = np.zeros((saved_its + 2, dim_x * 2))
+result[0, :] = np.concatenate([true_coeff, rsp])
+result[2:, :] = np.concatenate([packs['weight_rec'], packs['gate_rec']], 1)
+result[1, :dim_x] = np.squeeze(pooled_least_squares(xs, ys))
+
+if len(args.record_dir) > 0:
+	save_path = os.path.join(args.record_dir, exp_name + '.csv')
+	np.savetxt(save_path, result, delimiter=",")
+'''
 
 # visualize gate during training
 
