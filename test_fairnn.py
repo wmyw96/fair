@@ -1,6 +1,6 @@
 from data.model import *
 from methods.brute_force import brute_force
-from methods.fair_gumbel_one import fair_ll_sgd_gumbel_uni
+from methods.fair_gumbel_one import fairnn_sgd_gumbel_uni
 from methods.tools import pooled_least_squares
 from utils import *
 import numpy as np
@@ -34,7 +34,7 @@ parser.add_argument('--gamma', help='hyper parameter gamma', type=float, default
 parser.add_argument("--record_dir", help="record directory", type=str, default="logs/")
 parser.add_argument("--log", help="show log", type=bool, default=True)
 parser.add_argument("--mode", help="test mode", type=int, default=1)
-parser.add_argument("--diter", help="test mode", type=int, default=2)
+parser.add_argument("--diter", help="iter of discminator", type=int, default=2)
 
 args = parser.parse_args()
 
@@ -69,50 +69,10 @@ xs, ys, yts = sample_from_SCM(models, args.n)
 # FAIR Gumbel algorithm
 niters = args.niters
 iter_save = 100
-packs = fair_ll_sgd_gumbel_uni(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, niters_d=args.diter,
+packs = fairnn_sgd_gumbel_uni(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, niters_d=args.diter,
 							niters=niters, batch_size=args.batch_size, init_temp=args.init_temp,
 							final_temp=args.final_temp, iter_save=iter_save, log=args.log)
 
-beta = packs['weight']
-mask = packs['gate_rec'][-1] > 0.9
-
-# Refit using LS
-full_var = (np.arange(dim_x))
-var_set = full_var[mask].tolist()
-print(var_set)
-beta3 = broadcast(pooled_least_squares([x[:, var_set] for x in xs], ys), var_set, dim_x)
-
-
-if args.log:
-	print(f'True coefficient {true_coeff},')
-	print(f'Selected variables {np.where(mask)}')
-	print(f'FAIR SGD L2 error = {np.sum(np.square(beta - true_coeff))}')
-	print(f'FAIR SGD (LS Refitted) L2 error = {np.sum(np.square(beta3 - true_coeff))}')
-
-
-'''
-rsp = []
-for i in range(dim_x):
-	if i in parent_set:
-		rsp.append(2)
-	elif i in child_set:
-		rsp.append(0)
-	elif i in offspring_set:
-		rsp.append(1)
-	else:
-		rsp.append(3)
-rsp = np.array(rsp)
-
-saved_its = np.shape(packs['weight_rec'])[0]
-result = np.zeros((saved_its + 2, dim_x * 2))
-result[0, :] = np.concatenate([true_coeff, rsp])
-result[2:, :] = np.concatenate([packs['weight_rec'], packs['gate_rec']], 1)
-result[1, :dim_x] = np.squeeze(pooled_least_squares(xs, ys))
-
-if len(args.record_dir) > 0:
-	save_path = os.path.join(args.record_dir, exp_name + '.csv')
-	np.savetxt(save_path, result, delimiter=",")
-'''
 
 # visualize gate during training
 
@@ -127,8 +87,6 @@ plt.rc('font', size=20)
 rc('text', usetex=True)
 
 gate = packs['gate_rec']
-para = packs['weight_rec']
-print(np.shape(para))
 
 color_tuple = [
 	'#ae1908',  # red
@@ -151,7 +109,6 @@ rsp = np.array(rsp)
 color_rsp = [color_tuple[i] for i in rsp]
 
 print_vector(packs['gate_rec'][-1,:], color_rsp)
-print_vector(beta, color_rsp)
 
 plt.figure(figsize=(16, 16))
 ax1 = plt.subplot(2, 2, 1)
@@ -164,7 +121,7 @@ it_arr = np.arange(it_display)
 
 for i in range(dim_x):
 	ax1.plot(it_arr, gate[:it_display, i], color=color_tuple[rsp[i]])
-	ax2.plot(it_arr, para[:it_display, i] * gate[:it_display, i], color=color_tuple[rsp[i]])
+
 ax1.set_xlabel('iters (100)')
 ax1.set_ylabel('sigmoid(logits)')
 ax2.set_xlabel('iters (100)')

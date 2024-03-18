@@ -104,7 +104,7 @@ if TEST_ID == 1:
 
 
 if TEST_ID == 2:
-	candidate_n = [100, 300, 700, 1000, 2000]
+	candidate_n = [100, 700, 2000]
 
 	num_repeats = 50
 
