@@ -29,7 +29,7 @@ if TEST_ID == 2:
 	num_sml = results.shape[1]
 
 	vec_n = [100, 300, 700, 1000, 2000]
-	method_name = ['EILLS', "FAIR-BF", "FAIR-Gumbel", r"FAIR-Gumbel-RefitLS", "Oracle", r"IRM", r"Anchor", "ERM"]
+	method_name = ['EILLS', "FAIR-BF", "FAIR-GB", r"FAIR-RF", "Oracle", r"IRM", r"Anchor", "ERM"]
 	method_idx = [0, 1, 2, 7, 3, 4, 5, 6]
 
 	lines = [
@@ -75,6 +75,9 @@ if TEST_ID == 2:
 		for i in range(len(vec_n)):
 			measures = []
 			for k in range(num_sml):
+				error = np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :]))
+				if error > 0.2 and mid < 3:
+					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
 				measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
 			metric.append(np.mean(measures))
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
@@ -91,13 +94,13 @@ if TEST_ID == 2:
 
 
 if TEST_ID == 3:
-	results = np.load('unit_test_3_uni.npy')
+	results = np.load('uni_unit_test_3.npy')
 
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
-	vec_n = [2000, 10000]
-	method_name = ["FAIR-Gumbel", "FAIR-RefitLS", "Oracle", r"Semi-Oracle", "ERM"]
+	vec_n = [500, 1000, 2000, 5000, 10000]
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "ERM"]
 	method_idx = [0, 4, 1, 2, 3]
 
 	lines = [

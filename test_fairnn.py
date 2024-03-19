@@ -57,6 +57,10 @@ elif TEST_MODE == 3:
 	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
+elif TEST_MODE == 4:
+	dim_x = 12
+	models, true_coeff = [StructuralCausalModelNonlinear1(13), StructuralCausalModelNonlinear2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
+	parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"

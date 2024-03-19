@@ -79,6 +79,72 @@ class StructuralCausalModel2:
 		else:
 			return x
 
+
+class StructuralCausalModelNonlinear1:
+	def __init__(self, p, exogenous_cov=None, exogenous_dist='normal'):
+		self.p = p
+		if exogenous_cov is None:
+			exogenous_cov = np.eye(p)
+		exogenous_cov = np.diag(np.diag(exogenous_cov))
+		self.exogenous_cov = exogenous_cov
+		self.exogenous_cov_sqrt = np.sqrt(exogenous_cov)
+		self.exogenous_dist = exogenous_dist
+
+	def sample(self, n, split=True):
+		u = generate_exogeneous_variables(n, self.p, self.exogenous_cov_sqrt, self.exogenous_dist)
+		x = np.copy(u)
+		# x4
+		x[:, 4] = u[:, 4]
+		x[:, 1] = u[:, 1]
+		x[:, 2] = np.sin(x[:, 4]) * 1 + u[:, 2]
+		x[:, 3] = np.cos(x[:, 4]) * 1 + u[:, 3]
+		x[:, 5] = np.sin(x[:, 3] + u[:, 5])
+		x[:, 10] = x[:, 1] * 2.5 + x[:, 2] * 1.5 + u[:, 10]
+		x[:, 0] = np.sin(x[:, 1]) * 3 + np.cos(x[:, 2]) * 2 + np.sqrt(np.abs(x[:, 3])) * -1 + u[:, 0]
+		x[:, 6] = 0.8 * x[:, 0] * u[:, 6]
+		x[:, 7] = x[:, 3] * 0.5 + x[:, 0] + u[:, 7]
+		x[:, 8] = 0.5 * x[:, 7] + x[:, 0] * (-1) + x[:, 10] + u[:, 8]
+		x[:, 9] = np.tanh(x[:, 7]) + 0.1 * np.cos(x[:, 8]) + u[:, 9]
+		x[:, 11] = 0.4 * (x[:, 7] + x[:, 8]) * u[:, 11]
+		if split:
+			return x[:, 1:], x[:, :1], x[:, :1] - u[:, :1]
+		else:
+			return x
+
+
+class StructuralCausalModelNonlinear2:
+	def __init__(self, p, exogenous_cov=None, exogenous_dist='normal'):
+		self.p = p
+		if exogenous_cov is None:
+			exogenous_cov = np.eye(p)
+		exogenous_cov = np.diag(np.diag(exogenous_cov))
+		self.exogenous_cov = exogenous_cov
+		self.exogenous_cov_sqrt = np.sqrt(exogenous_cov)
+		self.exogenous_dist = exogenous_dist
+
+	def sample(self, n, split=True):
+		u = generate_exogeneous_variables(n, self.p, self.exogenous_cov_sqrt, self.exogenous_dist)
+		x = np.copy(u)
+		# print(f'E[x eps] = {np.mean(u[:, 0] * u[:, 1])}')
+
+		# x4
+		x[:, 4] = u[:, 4] ** 2 - 1
+		x[:, 1] = u[:, 1]
+		x[:, 2] = np.sin(x[:, 4]) * 1 + u[:, 2]
+		x[:, 3] = np.cos(x[:, 4]) * 1 + u[:, 3]
+		x[:, 5] = np.sin(x[:, 3] + u[:, 5])
+		x[:, 10] = x[:, 1] * 2.5 + x[:, 2] * 1.5 + u[:, 10]
+		x[:, 0] = np.sin(x[:, 1]) * 3 + np.cos(x[:, 2]) * 2 + np.sqrt(np.abs(x[:, 3])) * -1 + u[:, 0]
+		x[:, 6] = 0.8 * x[:, 0] * u[:, 6]
+		x[:, 7] = x[:, 3] * 4 + np.tanh(x[:, 0]) + u[:, 7]
+		x[:, 8] = 0.5 * x[:, 7] + x[:, 0] * (-1) + x[:, 10] + u[:, 8]
+		x[:, 9] = np.tanh(x[:, 7]) + 0.1 * np.cos(x[:, 8]) + u[:, 9]
+		x[:, 11] = 0.4 * (x[:, 7] + x[:, 8]) * u[:, 11]
+		if split:
+			return x[:, 1:], x[:, :1], x[:, :1] - u[:, :1]
+		else:
+			return x
+
 class AdditiveStructuralCausalModel:
 	'''
 		Consider the simple SCM that the strctural assignments admits additive form, that is 
