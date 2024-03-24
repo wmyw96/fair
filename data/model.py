@@ -100,7 +100,7 @@ class StructuralCausalModelNonlinear1:
 		x[:, 3] = np.cos(x[:, 4]) * 1 + u[:, 3]
 		x[:, 5] = np.sin(x[:, 3] + u[:, 5])
 		x[:, 10] = x[:, 1] * 2.5 + x[:, 2] * 1.5 + u[:, 10]
-		x[:, 0] = np.sin(x[:, 1]) * 3 + np.cos(x[:, 2]) * 2 + np.sqrt(np.abs(x[:, 3])) * -1 + u[:, 0]
+		x[:, 0] = np.cos(x[:, 1]) * 3 + np.sin(x[:, 2]) * 2 + -1.5 * np.cos(np.abs(x[:, 3])) + u[:, 0]
 		x[:, 6] = 0.8 * x[:, 0] * u[:, 6]
 		x[:, 7] = x[:, 3] * 0.5 + x[:, 0] + u[:, 7]
 		x[:, 8] = 0.5 * x[:, 7] + x[:, 0] * (-1) + x[:, 10] + u[:, 8]
@@ -134,7 +134,7 @@ class StructuralCausalModelNonlinear2:
 		x[:, 3] = np.cos(x[:, 4]) * 1 + u[:, 3]
 		x[:, 5] = np.sin(x[:, 3] + u[:, 5])
 		x[:, 10] = x[:, 1] * 2.5 + x[:, 2] * 1.5 + u[:, 10]
-		x[:, 0] = np.sin(x[:, 1]) * 3 + np.cos(x[:, 2]) * 2 + np.sqrt(np.abs(x[:, 3])) * -1 + u[:, 0]
+		x[:, 0] = np.cos(x[:, 1]) * 3 + np.sin(x[:, 2]) * 2 - 1.5 * np.cos(np.abs(x[:, 3]))  + u[:, 0]
 		x[:, 6] = 0.8 * x[:, 0] * u[:, 6]
 		x[:, 7] = x[:, 3] * 4 + np.tanh(x[:, 0]) + u[:, 7]
 		x[:, 8] = 0.5 * x[:, 7] + x[:, 0] * (-1) + x[:, 10] + u[:, 8]
@@ -179,11 +179,11 @@ class AdditiveStructuralCausalModel:
 					# sin function
 					z[:, i] += pre_factor * np.sin(z[:, j])
 				elif function_id == 3:
-					z[:, i] += pre_factor * np.cos(z[:, j])
+					z[:, i] += pre_factor * 1 / (1 + np.exp(-z[:, j]))
 				elif function_id == 4:
-					z[:, i] += pre_factor * np.sin(np.pi * z[:, j])
+					z[:, i] += pre_factor * np.cos(z[:, j])
 				elif function_id == 5:
-					z[:, i] += pre_factor * np.sqrt(np.abs(z[:, j]))
+					z[:, i] += pre_factor * np.sin(np.pi * z[:, j])
 		if split:
 			x = np.concatenate([z[:, :self.y_index], z[:, (self.y_index+1):]], 1)
 			y = z[:, self.y_index:(self.y_index+1)]
@@ -192,6 +192,98 @@ class AdditiveStructuralCausalModel:
 			return (x, y, y_gt)
 		else:
 			return z
+
+
+def npsigmoid(x):
+	return 1 / (1 + np.exp(-x))
+
+
+def ident(x):
+	return x
+
+
+def tcos(x):
+	return 2 * np.cos(x)
+
+
+def idx_to_func(idx):
+	if idx == 1:
+		return np.sin
+	elif idx == 2:
+		return tcos
+	elif idx == 3:
+		return np.tanh
+	elif idx == 4:
+		return npsigmoid
+	elif idx == 5:
+		return ident
+
+
+class CharysanSCM:
+	def __init__(self, num_parents, num_children, func_parent=None, coeff_parent=None, randtype='guassian'):
+		self.num_parents = num_parents
+		self.num_children = num_children
+		self.randtype = randtype
+		if func_parent is not None:
+			self.func_parent = func_parent
+			self.coeff_parent = coeff_parent
+		else:
+			self.func_parent = []
+			self.coeff_parent = []
+			for i in range(num_parents):
+				self.func_parent.append(np.random.randint(5) + 1)
+			for i in range(num_parents):
+				self.coeff_parent.append(np.random.uniform(-1.5, 1.5))
+
+		self.func_children = []
+		self.coeff_children = []
+		self.noise_level = []
+		for i in range(num_children):
+			self.func_children.append([np.random.randint(5) + 1, np.random.randint(5) + 1])
+			self.coeff_children.append([np.random.uniform(-1.5, 1.5), np.random.uniform(-1.5, 1.5)])
+			self.noise_level.append(np.random.uniform(0.5, 1))
+
+
+	def sample(self, n, split=True):
+		num_vars = self.num_parents + self.num_children + 1
+		z = np.zeros((n, self.num_parents + self.num_children + 1))
+		u1 = np.random.normal(0, 1, (n * (self.num_parents)))
+		u2 = np.random.uniform(-np.sqrt(1.5), np.sqrt(1.5), (n * (1 + self.num_children)))
+		u = np.concatenate([
+			np.reshape(u1, (n, self.num_parents)),
+			np.reshape(u2, (n, 1 + self.num_children))], 1)
+
+		for i in range(self.num_parents):
+			z[:, i] = u[:, i]
+			func = idx_to_func(self.func_parent[i])
+			z[:, num_vars - 1] += func(u[:, i])
+
+		z[:, num_vars - 1] += u[:, num_vars - 1]
+
+		for i in range(self.num_children):
+			z[:, i + self.num_parents] = u[:, i + self.num_parents]
+			func = idx_to_func(self.func_children[i][0])
+			func2 = idx_to_func(self.func_children[i][1])
+			z[:, i + self.num_parents] += self.coeff_children[i][0] * func(z[:, num_vars - 1]) + self.coeff_children[i][1] * func2(u[:, num_vars - 1])
+
+		if split:
+			x = z[:, :num_vars-1]
+			y = z[:, num_vars-1:]
+			yt = y - u[:, num_vars-1:]
+			return x, y, yt
+		else:
+			return z
+
+
+def generate_nonlinear_SCM(num_envs, nparent, nchild):
+	models = []
+	e0 = CharysanSCM(nparent, nchild)
+	models.append(e0)
+	for i in range(num_envs - 1):
+		models.append(CharysanSCM(nparent, nchild, e0.func_parent, e0.coeff_parent))
+	parent_set = [i for i in range(nparent)]
+	children_set = [(i + nparent) for i in range(nchild)]
+	return models, parent_set, children_set
 
 
 def random_assignment_matrix(num_vars, ratio, function_id_max, coefficient_max, degree_max, reference_g=None):
@@ -208,14 +300,14 @@ def random_assignment_matrix(num_vars, ratio, function_id_max, coefficient_max, 
 					cnt += 1
 				if cnt >= degree_max:
 					break
-			coefficient_matrix[i, i] = np.abs(np.random.uniform(-coefficient_max, coefficient_max))
+			coefficient_matrix[i, i] = np.abs(np.random.uniform(-coefficient_max, coefficient_max)) + 0.5
 	else:
 		for i in range(num_vars):
 			for j in range(i):
 				if reference_g[i, j] > 0:
 					function_matrix[i, j] = np.random.randint(function_id_max) + 1
 					coefficient_matrix[i, j] = np.random.uniform(-coefficient_max, coefficient_max)
-			coefficient_matrix[i, i] = np.abs(np.random.uniform(-coefficient_max, coefficient_max))
+			coefficient_matrix[i, i] = np.abs(np.random.uniform(-coefficient_max, coefficient_max)) + 0.5
 
 	return function_matrix, coefficient_matrix
 
@@ -226,16 +318,25 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 
 	models = []
 	func_mat0, coeff_mat0 = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1, 3)
-	if law == 'linear':
-		func_mat0[y_index, :] = np.minimum(func_mat0[y_index, :], 1)
 
 	num_child = np.sum(func_mat0 > 0, 0)[y_index]
 	if num_child < min_child:
 		remain_child = min_child - num_child
-		for i in range(y_index+1, num_vars):
-			if func_mat0[i, y_index] == 0:
+		idx = np.random.permutation(num_vars-y_index-1)
+		for i in range(num_vars-y_index-1):
+			if func_mat0[idx[i]+y_index+1, y_index] == 0:
 				remain_child -= 1
-				func_mat0[i, y_index] = 1
+				func_mat0[idx[i]+y_index+1, y_index] = np.random.randint(nonlinear_id) + 1
+			if remain_child == 0:
+				break
+
+	if num_child > min_child + 1:
+		remain_child = num_child - min_child - 1
+		idx = np.random.permutation(num_vars-y_index-1)
+		for i in range(num_vars-y_index-1):
+			if func_mat0[idx[i]+y_index+1, y_index] > 0:
+				remain_child -= 1
+				func_mat0[idx[i]+y_index+1, y_index] = 0
 			if remain_child == 0:
 				break
 
@@ -245,9 +346,16 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 		for i in range(y_index):
 			if func_mat0[y_index, i] == 0:
 				remain_parent -= 1
-				func_mat0[y_index, i] = 1
+				func_mat0[y_index, i] = np.random.randint(nonlinear_id - 1) + 1
 			if remain_parent == 0:
 				break
+
+	if law == 'linear':
+		func_mat0[y_index, :] = np.minimum(func_mat0[y_index, :], 1)
+		ratio = 1.0
+	else:
+		func_mat0[y_index, :] = np.minimum(func_mat0[y_index, :], nonlinear_id - 1)
+		ratio = 1.0
 
 	parent_set = []
 	# enforce large signal
@@ -255,6 +363,8 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 		if func_mat0[y_index, i] > 0:
 			coeff_mat0[y_index, i] = (np.abs(np.random.uniform(0, 0.5)) + 1) * (2*np.random.randint(2)-1)
 			parent_set.append(i)
+		if func_mat0[y_index, i] >= 2:
+			coeff_mat0[y_index, i]  *= 2
 	coeff_mat0[y_index, y_index] = 1
 
 	# enforce large bias
@@ -289,7 +399,8 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 			for j in range(y_index+1, i):
 				if func_mat[i, j] > 0 and j in offspring_set:
 					offspring_set.append(i)
-
+	offspring_set = list(set(offspring_set))
+	print(f'function assignment = {func_mat0[y_index, :y_index]}')
 	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set, child_set, offspring_set
 
 

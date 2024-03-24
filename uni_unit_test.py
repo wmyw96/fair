@@ -1,13 +1,13 @@
 from data.model import *
 from methods.brute_force import greedy_search, brute_force, pooled_least_squares, support_set
 from methods.predessors import *
-from methods.fair_gumbel_one import fair_ll_sgd_gumbel_uni
+from methods.fair_gumbel_one import *
 import numpy as np
 import time
 from eills_demo_script.demo_wrapper import *
-from utils import get_linear_SCM
+from utils import get_linear_SCM, get_SCM, get_nonlinear_SCM
 
-TEST_ID = 3
+TEST_ID = 4
 
 if TEST_ID == 2:
 	candidate_n = [100, 300, 700, 1000, 2000]
@@ -134,3 +134,90 @@ if TEST_ID == 3:
 
 
 	np.save('uni_unit_test_3.npy', result)
+
+
+if TEST_ID == 4:
+	#candidate_n = [1000, 2000, 5000, 10000, 200000]
+	candidate_n = [1000, 3000, 7000, 10000, 30000]
+
+	# candidate_n = [500, 1000, 2000, 5000, 10000]
+
+	num_repeats = 5
+
+	np.random.seed(0)
+
+	result = np.zeros((len(candidate_n), num_repeats, 5))
+
+	for t in range(num_repeats):
+		for (ni, n) in enumerate(candidate_n):
+			start_time = time.time()
+			np.random.seed(7)
+
+			print(f'================ Test ID = {t}, n = {n} ================')
+			dim_x = 12
+			models, parent_set, child_set = \
+				get_nonlinear_SCM(num_envs=2, nparent=5, nchild=7, bias_greater_than=0.5, log=False)
+
+			print(f'number of child = {len(child_set)}')
+
+			xs, ys, yts = sample_from_SCM(models, n)
+			# generate valid & test data
+			xvs, yvs, yvts = sample_from_SCM(models, n // 7 * 3)
+			xts, yts, ytts = sample_from_SCM(models, 50000)
+
+			valid_x, valid_y = np.concatenate(xvs, 0), np.concatenate(yvs, 0)
+			test_x, test_y = np.concatenate(xts, 0), np.concatenate(ytts, 0)
+
+			eval_data = (valid_x, valid_y, test_x, test_y)
+
+			# common hyper-parameter
+			batch_size, lr, riter = 128, 1e-3, 10000
+
+			# Report Oracle estimation performance
+			mask4 = np.zeros((dim_x, ))
+			for i in parent_set:
+				mask4[i] = 1.0
+			packs4 = fairnn_sgd_gumbel_refit(xs, ys, mask4, eval_data, learning_rate=lr, niters=riter, 
+											batch_size=batch_size, log=False)
+			eval_loss4 = packs4['loss_rec']
+			loss4 = eval_loss4[np.argmin(eval_loss4[:, 0]), 1]
+			print(f'Oracle Test Error: {loss4}')
+			result[ni, t, 0] = loss4
+
+			# Report ERM estimation performance
+			mask3 = np.ones((dim_x, ))
+			packs3 = fairnn_sgd_gumbel_refit(xs, ys, mask3, eval_data, learning_rate=lr, niters=riter, 
+											batch_size=batch_size, log=False)
+			eval_loss3 = packs3['loss_rec']
+			loss3 = eval_loss3[np.argmin(eval_loss3[:, 0]), 1]
+			print(f'ERM Test Error: {loss3}')
+			result[ni, t, 1] = loss3
+
+			# Report FAIR-Gumbel performance
+
+			packs1 = fairnn_sgd_gumbel_uni(xs, ys, eval_data=eval_data, hyper_gamma=36, learning_rate=lr, niters_d=3, 
+										niters_g=1, niters=100000, batch_size=batch_size, init_temp=5, offset=-3,
+										final_temp=0.01, iter_save=100, log=False)
+
+			mask = (packs1['gate_rec'][-1] > 0.9) * 1.0
+			eval_loss1 = packs1['loss_rec']
+			loss1 = eval_loss1[-1, 1]
+			print(f'FAIR Test Error: {loss1}')
+			result[ni, t, 2] = loss1
+
+			# FAIR-Gumbel Refit performance
+			packs2 = fairnn_sgd_gumbel_refit(xs, ys, mask, eval_data, learning_rate=lr, niters=riter, 
+								batch_size=batch_size, log=False)
+			eval_loss2 = packs2['loss_rec']
+			loss2 = eval_loss2[np.argmin(eval_loss2[:, 0]), 1]
+			print('Refit Test Error: {}'.format(loss2))
+			result[ni, t, 3] = loss2
+
+			print(f'FAIR mask = {mask}')
+			print(print_prob(packs1['gate_rec'][-1]))
+
+			end_time = time.time()
+			print(f'Running Case: n = {n}, t = {t}, secs = {end_time - start_time}s\n')
+
+	np.save('uni_unit_test_4.npy', result)
+

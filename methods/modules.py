@@ -69,6 +69,22 @@ class GumbelGate(torch.nn.Module):
 		return self.logits.detach().cpu().numpy()
 
 
+class FixedGate(torch.nn.Module):
+	def __init__(self, input_dim, mask, device):
+		self.mask = torch.tensor(mask, device=device).float()
+		self.logits = self.mask * 100 - (1 - self.mask) * 100
+		self.input_dim = input_dim
+		self.device = device
+
+	def generate_mask(self, temperatures=0, shape=None):
+		if shape is None:
+			shape = (1, self.input_dim)
+		return torch.reshape(self.mask, shape)
+
+	def get_logits_numpy(self):
+		return self.logits.detach().cpu().numpy()
+
+
 class NNModule(torch.nn.Module):
 	'''
 		A class to implemented fully connected neural network
@@ -86,7 +102,7 @@ class NNModule(torch.nn.Module):
 		forward(x)
 			Implementation of forwards pass
 	'''
-	def __init__(self, input_dim, depth, width, out_act=None, res_connect=True):
+	def __init__(self, input_dim, depth, width, add_bn, out_act=None, res_connect=True):
 		'''
 			Parameters
 			----------
@@ -102,9 +118,14 @@ class NNModule(torch.nn.Module):
 		super(NNModule, self).__init__()
 
 		if depth >= 1:
-			self.relu_nn = [('linear1', nn.Linear(input_dim, width)), ('relu1', nn.ReLU())]
+			if add_bn:
+				self.relu_nn = [('linear1', nn.Linear(input_dim, width)), ('batch_norm1', nn.BatchNorm1d(width)), ('relu1', nn.ReLU())]
+			else:
+				self.relu_nn = [('linear1', nn.Linear(input_dim, width)), ('relu1', nn.ReLU())]
 			for i in range(depth - 1):
 				self.relu_nn.append(('linear{}'.format(i+2), nn.Linear(width, width)))
+				if add_bn:
+					self.relu_nn.append(('batch_norm{}'.format(i + 2), nn.BatchNorm1d(width)))
 				self.relu_nn.append(('relu{}'.format(i+2), nn.ReLU()))
 
 			self.relu_nn.append(('linear{}'.format(depth+1), nn.Linear(width, 1)))
@@ -119,7 +140,16 @@ class NNModule(torch.nn.Module):
 			self.relu_stack = torch.nn.Linear(in_features=input_dim, out_features=1, bias=True)
 			self.res_connect = False
 
+		self.x_mean = torch.tensor(np.zeros((1, input_dim))).float()
+		self.x_std = torch.tensor(np.ones((1, input_dim))).float()
+
 		self.out_act = out_act
+
+	def standardize(self, train_x):
+		self.x_mean = torch.tensor(np.mean(train_x, 0, keepdims=True)).float()
+		#print(self.x_mean)
+		self.x_std = torch.tensor(np.std(train_x, 0, keepdims=True)).float()
+		#print(self.x_std)
 
 	def forward(self, x):
 		'''
@@ -133,6 +163,7 @@ class NNModule(torch.nn.Module):
 			out : torch.tensor
 				(n, 1) matrix of the prediction
 		'''
+		x = (x - self.x_mean) / self.x_std
 		out = self.relu_stack(x)
 		if self.res_connect:
 			out = out + self.linear_res(x)
@@ -222,7 +253,7 @@ class FairNN(torch.nn.Module):
 			Implementation of forwards pass
 
 	'''
-	def __init__(self, input_dim, depth_g, width_g, depth_f, width_f, num_envs):
+	def __init__(self, input_dim, depth_g, width_g, depth_f, width_f, num_envs, xs, add_bn=False):
 		'''
 			Parameters
 			----------
@@ -230,11 +261,15 @@ class FairNN(torch.nn.Module):
 				input dimension
 		'''
 		super(FairNN, self).__init__()
-		self.g = NNModule(input_dim=input_dim, depth=depth_g, width=width_g)
+		self.g = NNModule(input_dim=input_dim, depth=depth_g, width=width_g, add_bn=add_bn)
+		#self.g.standardize(np.concatenate(xs, 0))
 		self.num_envs = num_envs
 		self.fs = []
 		for e in range(num_envs):
-			self.fs.append(NNModule(input_dim=input_dim, depth=depth_f, width=width_f))
+			fe = NNModule(input_dim=input_dim, depth=depth_f, width=width_f, add_bn=add_bn)
+			#fe.standardize(xs[e])
+			self.fs.append(fe)
+
 
 	def params_g(self, log=False):
 		if log:
@@ -253,7 +288,7 @@ class FairNN(torch.nn.Module):
 			paras += self.fs[i].parameters()
 		return paras
 
-	def forward(self, xs):
+	def forward(self, xs, pred=False):
 		'''
 			Parameters
 			----------
@@ -266,9 +301,13 @@ class FairNN(torch.nn.Module):
 				potential (batch_size, 1) torch tensor
 
 		'''
-		out_gs, out_fs = [], []
-		for e in range(self.num_envs):
-			out_gs.append(self.g(xs[e]))
-			out_fs.append(self.fs[e](xs[e]))
-		return out_gs, out_fs
+		if pred:
+			return self.g(xs)
+		else:
+			out_g = self.g(torch.cat(xs, 0))
+			out_fs = []
+			for e in range(self.num_envs):
+				out_fs.append(self.fs[e](xs[e]))
+			out_f = torch.cat(out_fs, 0)
+			return out_g, out_f
 

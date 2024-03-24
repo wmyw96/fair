@@ -1,6 +1,6 @@
 from data.model import *
 from methods.brute_force import brute_force
-from methods.fair_gumbel_one import fairnn_sgd_gumbel_uni
+from methods.fair_gumbel_one import fairnn_sgd_gumbel_uni, fairnn_sgd_gumbel_refit
 from methods.tools import pooled_least_squares
 from utils import *
 import numpy as np
@@ -35,6 +35,11 @@ parser.add_argument("--record_dir", help="record directory", type=str, default="
 parser.add_argument("--log", help="show log", type=bool, default=True)
 parser.add_argument("--mode", help="test mode", type=int, default=1)
 parser.add_argument("--diter", help="iter of discminator", type=int, default=2)
+parser.add_argument("--giter", help="iter of predictor", type=int, default=1)
+parser.add_argument("--temp_iter", help="iter to attain final temp", type=int, default=50000)
+parser.add_argument("--threshold", help="truncation threshold", type=float, default=0.85)
+parser.add_argument("--riter", help="iter of refitting", type=int, default=10000)
+parser.add_argument("--offset", help="init offset", type=float, default=-3)
 
 args = parser.parse_args()
 
@@ -58,9 +63,19 @@ elif TEST_MODE == 3:
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
 elif TEST_MODE == 4:
+	dim_x = args.dim_x
+	models, true_coeff, parent_set, child_set, offspring_set = \
+		get_SCM(num_vars=dim_x + 1, num_envs=2, y_index=5, 
+					min_child=3, min_parent=5, nonlinear_id=5, 
+					bias_greater_than=args.lsbias, log=args.log)
+elif TEST_MODE == 5:
 	dim_x = 12
-	models, true_coeff = [StructuralCausalModelNonlinear1(13), StructuralCausalModelNonlinear2(13)], np.array([3, 2, -0.5] + [0] * (13 - 4))
+	models = [StructuralCausalModelNonlinear1(dim_x + 1), StructuralCausalModelNonlinear2(dim_x + 1)]
 	parent_set, child_set, offspring_set = [0, 1, 2], [6, 7], [6, 7, 8]
+elif TEST_MODE == 6:
+	dim_x = 12
+	models, parent_set, child_set = \
+		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=7, bias_greater_than=args.lsbias, log=args.log)
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
@@ -70,13 +85,46 @@ exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_
 print(parent_set, child_set)
 xs, ys, yts = sample_from_SCM(models, args.n)
 
+# generate valid & test data
+xvs, yvs, yvts = sample_from_SCM(models, args.n // 7 * 3)
+xts, yts, ytts = sample_from_SCM(models, args.n)
+
+valid_x, valid_y = np.concatenate(xvs, 0), np.concatenate(yvs, 0)
+test_x, test_y = np.concatenate(xts, 0), np.concatenate(ytts, 0)
+
+eval_data = (valid_x, valid_y, test_x, test_y)
+
+
+# Report ERM estimation performance
+mask3 = np.ones((dim_x, ))
+packs3 = fairnn_sgd_gumbel_refit(xs, ys, mask3, eval_data, learning_rate=args.lr, niters=args.riter, 
+								batch_size=args.batch_size, log=False)
+eval_loss3 = packs3['loss_rec']
+print('ERM Test Error: {}'.format(eval_loss3[np.argmin(eval_loss3[:, 0]), 1]))
+
+# Report Oracle estimation performance
+mask4 = np.zeros((dim_x, ))
+for i in parent_set:
+	mask4[i] = 1.0
+packs4 = fairnn_sgd_gumbel_refit(xs, ys, mask4, eval_data, learning_rate=args.lr, niters=args.riter, 
+								batch_size=args.batch_size, log=False)
+eval_loss4 = packs4['loss_rec']
+print('Oracle Test Error: {}'.format(eval_loss4[np.argmin(eval_loss4[:, 0]), 1]))
+
 # FAIR Gumbel algorithm
 niters = args.niters
 iter_save = 100
-packs = fairnn_sgd_gumbel_uni(xs, ys, hyper_gamma=args.gamma, learning_rate=args.lr, niters_d=args.diter,
-							niters=niters, batch_size=args.batch_size, init_temp=args.init_temp,
-							final_temp=args.final_temp, iter_save=iter_save, log=args.log)
+packs = fairnn_sgd_gumbel_uni(xs, ys, eval_data=eval_data, hyper_gamma=args.gamma, learning_rate=args.lr, niters_d=args.diter, 
+							niters_g=args.giter, niters=niters, batch_size=args.batch_size, init_temp=args.init_temp, offset=args.offset,
+							final_temp=args.final_temp, temp_iter=args.temp_iter, iter_save=iter_save, log=args.log)
 
+mask = (packs['gate_rec'][-1] > args.threshold) * 1.0
+
+# Report estimation performance
+packs2 = fairnn_sgd_gumbel_refit(xs, ys, mask, eval_data, learning_rate=args.lr, niters=args.riter, 
+								batch_size=args.batch_size, log=False)
+eval_loss = packs2['loss_rec']
+print('Refit Test Error: {}'.format(eval_loss[np.argmin(eval_loss[:, 0]), 1]))
 
 # visualize gate during training
 
@@ -114,11 +162,8 @@ color_rsp = [color_tuple[i] for i in rsp]
 
 print_vector(packs['gate_rec'][-1,:], color_rsp)
 
-plt.figure(figsize=(16, 16))
-ax1 = plt.subplot(2, 2, 1)
-ax2 = plt.subplot(2, 2, 2)
-ax3 = plt.subplot(2, 2, 3)
-ax4 = plt.subplot(2, 2, 4)
+plt.figure(figsize=(8, 8))
+ax1 = plt.subplot(1, 1, 1)
 
 it_display = niters // iter_save
 it_arr = np.arange(it_display)
@@ -128,15 +173,5 @@ for i in range(dim_x):
 
 ax1.set_xlabel('iters (100)')
 ax1.set_ylabel('sigmoid(logits)')
-ax2.set_xlabel('iters (100)')
-ax2.set_ylabel(r'weight $\times$ sigmoid')
-
-ax3.plot(it_arr, loss_rec[:, 0])
-ax3.set_xlabel('iters (100)')
-ax3.set_ylabel('loss R')
-
-ax4.plot(it_arr, loss_rec[:, 1])
-ax4.set_xlabel('iters (100)')
-ax4.set_ylabel('loss J')
 
 plt.show()
