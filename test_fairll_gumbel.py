@@ -22,7 +22,7 @@ parser.add_argument("--seed", help="random seed", type=int, default=1234)
 parser.add_argument("--n", help="number of samples", type=int, default=1000)
 parser.add_argument("--batch_size", help="batch size", type=int, default=36)
 parser.add_argument("--num_envs", help="number of environments", type=int, default=2)
-parser.add_argument("--dim_x", help="number of explanatory vars", type=int, default=60)
+parser.add_argument("--dim_x", help="number of explanatory vars", type=int, default=70)
 parser.add_argument("--niters", help="number of iterations", type=int, default=50000)
 parser.add_argument("--lr", help="learning rate", type=float, default=1e-3)
 parser.add_argument("--min_child", help="min number of children", type=int, default=5)
@@ -55,6 +55,7 @@ elif TEST_MODE == 3:
 	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
+	models[0].visualize(offspring_set)
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"

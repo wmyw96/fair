@@ -138,32 +138,31 @@ if TEST_ID == 3:
 
 if TEST_ID == 4:
 	#candidate_n = [1000, 2000, 5000, 10000, 200000]
-	candidate_n = [1000, 3000, 7000, 10000, 30000]
+	candidate_n = [1000, 3000, 5000, 7000, 10000]
 
 	# candidate_n = [500, 1000, 2000, 5000, 10000]
 
-	num_repeats = 5
+	num_repeats = 30
 
 	np.random.seed(0)
 
 	result = np.zeros((len(candidate_n), num_repeats, 5))
 
-	for t in range(num_repeats):
-		for (ni, n) in enumerate(candidate_n):
+	for (ni, n) in enumerate(candidate_n):
+		for t in range(num_repeats):
 			start_time = time.time()
-			np.random.seed(7)
+			np.random.seed(t)
 
 			print(f'================ Test ID = {t}, n = {n} ================')
-			dim_x = 12
-			models, parent_set, child_set = \
-				get_nonlinear_SCM(num_envs=2, nparent=5, nchild=7, bias_greater_than=0.5, log=False)
-
+			dim_x = 26
+			models, parent_set, child_set, offspring_set = \
+				get_nonlinear_SCM(num_envs=2, nparent=5, nchild=4, dim_x=dim_x, bias_greater_than=0.5, log=False)
 			print(f'number of child = {len(child_set)}')
 
 			xs, ys, yts = sample_from_SCM(models, n)
 			# generate valid & test data
 			xvs, yvs, yvts = sample_from_SCM(models, n // 7 * 3)
-			xts, yts, ytts = sample_from_SCM(models, 50000)
+			xts, yts, ytts = sample_from_SCM(models, 30000)
 
 			valid_x, valid_y = np.concatenate(xvs, 0), np.concatenate(yvs, 0)
 			test_x, test_y = np.concatenate(xts, 0), np.concatenate(ytts, 0)
@@ -171,7 +170,7 @@ if TEST_ID == 4:
 			eval_data = (valid_x, valid_y, test_x, test_y)
 
 			# common hyper-parameter
-			batch_size, lr, riter = 128, 1e-3, 10000
+			batch_size, lr, riter = 64, 1e-3, 10000
 
 			# Report Oracle estimation performance
 			mask4 = np.zeros((dim_x, ))
@@ -195,11 +194,16 @@ if TEST_ID == 4:
 
 			# Report FAIR-Gumbel performance
 
+			iters = 75000
 			packs1 = fairnn_sgd_gumbel_uni(xs, ys, eval_data=eval_data, hyper_gamma=36, learning_rate=lr, niters_d=3, 
-										niters_g=1, niters=100000, batch_size=batch_size, init_temp=5, offset=-3,
-										final_temp=0.01, iter_save=100, log=False)
+										niters_g=1, niters=iters, batch_size=batch_size, init_temp=5, offset=-3,
+										final_temp=0.05, iter_save=100, log=False)
 
-			mask = (packs1['gate_rec'][-1] > 0.9) * 1.0
+			threshold = 0.9
+			if n == 1000:
+				threshold = 0.65
+			mask = (packs1['gate_rec'][-1] > threshold) * 1.0
+
 			eval_loss1 = packs1['loss_rec']
 			loss1 = eval_loss1[-1, 1]
 			print(f'FAIR Test Error: {loss1}')

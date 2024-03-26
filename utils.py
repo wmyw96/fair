@@ -32,10 +32,10 @@ def get_SCM(num_vars, num_envs, y_index, min_child, min_parent, nonlinear_id, bi
 			return models, true_coeff, parent_set, child_set, offspring_set
 
 
-def get_nonlinear_SCM(num_envs, nchild, nparent, bias_greater_than=0.5, log=False):
+def get_nonlinear_SCM(num_envs, nchild, nparent, dim_x, bias_greater_than=0.5, log=False):
 	while True:
-		models, parent_set, child_set = \
-			generate_nonlinear_SCM(num_envs, nparent, nchild)
+		models, parent_set, child_set, offspring_set = \
+			generate_nonlinear_SCM(num_envs, nparent, nchild, dim_x - nchild - nparent)
 		xs, ys, yts = sample_from_SCM(models, 100000)
 		beta_ls = pooled_least_squares(xs, ys)
 		beta = [least_squares(xs[e], ys[e]) for e in range(num_envs)]
@@ -44,7 +44,7 @@ def get_nonlinear_SCM(num_envs, nchild, nparent, bias_greater_than=0.5, log=Fals
 		if hetero > bias_greater_than:
 			if log:
 				print(models[0].func_parent, models[0].coeff_parent)
-			return models, parent_set, child_set
+			return models, parent_set, child_set, offspring_set
 
 
 

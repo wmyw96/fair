@@ -1,4 +1,6 @@
 import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 def generate_exogeneous_variables(n, p, cov_sqrt, dist):
@@ -194,8 +196,48 @@ class AdditiveStructuralCausalModel:
 			return z
 
 
-def npsigmoid(x):
-	return 1 / (1 + np.exp(-x))
+	def visualize(self, of_set):
+		G = nx.DiGraph()
+
+		for i in range(self.num_vars - 1):
+			G.add_node(f"{i+1}")
+
+		node_colors = ['#9acdc4'] * (self.num_vars - 1) + ['white']
+		G.add_node("Y")
+
+		for i in range(self.num_vars):
+			for j in range(i):
+				if i < self.y_index:
+					if self.assignments[i, j] > 0:
+						G.add_edge(f"{j+1}", f"{i+1}")
+				elif i == self.y_index:
+					if self.assignments[i, j] > 0:
+						G.add_edge(f"{j+1}", "Y")
+						node_colors[j] = '#05348b'
+				elif i > self.y_index:
+					if self.assignments[i, j] > 0:
+						if j == self.y_index:
+							G.add_edge("Y", f"{i}")
+							node_colors[i-1] = '#ae1908'
+						else:
+							pre_idx = j
+							if j < self.y_index:
+								pre_idx += 1
+							G.add_edge(f"{pre_idx}", f"{i}")
+
+		for i in range(self.num_vars):
+			idx = i
+			if i > self.y_index:
+				idx -= 1
+			if node_colors[idx] == '#9acdc4' and i in of_set:
+				node_colors[idx] = '#ec813b'
+
+		pos = nx.spring_layout(G)  # Choose a layout algorithm
+		nx.draw(G, pos=pos, with_labels=True, arrows=True,
+				node_color=node_colors)
+		plt.show()
+
+
 
 
 def ident(x):
@@ -206,21 +248,32 @@ def tcos(x):
 	return 2 * np.cos(x)
 
 
+def relu(x):
+	return np.maximum(0, x)
+
+
 def idx_to_func(idx):
 	if idx == 1:
 		return np.sin
 	elif idx == 2:
-		return tcos
+		return np.sin
 	elif idx == 3:
 		return np.tanh
 	elif idx == 4:
-		return npsigmoid
+		return relu
 	elif idx == 5:
 		return ident
 
 
+def generate_random_weight(x, rgg):
+	while True:
+		a = np.random.uniform(-rgg, rgg)
+		if np.abs(a - x) > 3:
+			return a
+
+
 class CharysanSCM:
-	def __init__(self, num_parents, num_children, func_parent=None, coeff_parent=None, randtype='guassian'):
+	def __init__(self, num_parents, num_children, func_parent=None, coeff_parent=None, func_children=None, coeff_children=None, num_other=0, other_assc=None, randtype='guassian'):
 		self.num_parents = num_parents
 		self.num_children = num_children
 		self.randtype = randtype
@@ -238,20 +291,58 @@ class CharysanSCM:
 		self.func_children = []
 		self.coeff_children = []
 		self.noise_level = []
-		for i in range(num_children):
-			self.func_children.append([np.random.randint(5) + 1, np.random.randint(5) + 1])
-			self.coeff_children.append([np.random.uniform(-1.5, 1.5), np.random.uniform(-1.5, 1.5)])
-			self.noise_level.append(np.random.uniform(0.5, 1))
+		offspring = [i + num_parents for i in range(num_children)]
+		if coeff_children is None:
+			for i in range(num_children):
+				fid = np.random.randint(2) * 2 + 3
+				self.func_children.append([fid, fid])
+				self.coeff_children.append([np.random.uniform(-1.5, 1.5), np.random.uniform(-1.5, 1.5)])
+				self.noise_level.append(np.random.uniform(1, 1.5))
+		else:
+			for i in range(num_children):
+				fid = 8 - func_children[i][0]
+				self.func_children.append([fid, fid])
+				self.coeff_children.append([generate_random_weight(coeff_children[i][0], 5), generate_random_weight(coeff_children[i][1], 5)])
+				self.noise_level.append(np.random.uniform(1, 1.5))
+
+		self.num_other = num_other
+		self.other_assc = []
+		for i in range(num_other):
+			nvar = np.random.randint(3)
+			comp = []
+			#mystr = 'var %d: ' % (i + num_parents + num_children)
+			if other_assc is None:
+				for k in range(nvar):
+					idx = np.random.randint(num_parents + num_children)
+					#mystr += ' %d ' % (idx)
+					coeff = np.random.uniform(-1, 1)
+					func = np.random.randint(3) + 1
+					if idx >= num_parents:
+						offspring.append(i + num_children + num_parents)
+					comp.append((idx, func, coeff))
+				noise_level = np.random.uniform(2, 2.5)
+				self.other_assc.append((nvar, comp, noise_level))
+
+				#print(mystr)
+			else:
+				nvar, comp0, noise_level0 = other_assc[i]
+				for k in range(nvar):
+					idx, func, coeff = comp0[k]
+					coeff = np.random.uniform(-1, 1)
+					func = np.random.randint(3) + 1
+					comp.append((idx, func, coeff))
+				noise_level = np.random.uniform(2.5, 3)
+				self.other_assc.append((nvar, comp, noise_level))
+
+		self.offspring = list(set(offspring))
 
 
 	def sample(self, n, split=True):
-		num_vars = self.num_parents + self.num_children + 1
-		z = np.zeros((n, self.num_parents + self.num_children + 1))
-		u1 = np.random.normal(0, 1, (n * (self.num_parents)))
-		u2 = np.random.uniform(-np.sqrt(1.5), np.sqrt(1.5), (n * (1 + self.num_children)))
-		u = np.concatenate([
-			np.reshape(u1, (n, self.num_parents)),
-			np.reshape(u2, (n, 1 + self.num_children))], 1)
+		num_vars = self.num_parents + self.num_children + self.num_other + 1
+		z = np.zeros((n, num_vars))
+		u1 = np.reshape(np.random.uniform(-1.5, 1.5, (n * (num_vars - 1))), (n, (num_vars - 1)))
+		u2 = np.reshape(np.random.normal(0, 1, (n * 1)), (n, 1))
+		u = np.concatenate([u1, u2], 1)
 
 		for i in range(self.num_parents):
 			z[:, i] = u[:, i]
@@ -261,10 +352,20 @@ class CharysanSCM:
 		z[:, num_vars - 1] += u[:, num_vars - 1]
 
 		for i in range(self.num_children):
-			z[:, i + self.num_parents] = u[:, i + self.num_parents]
+			z[:, i + self.num_parents] = u[:, i + self.num_parents] * self.noise_level[i]
 			func = idx_to_func(self.func_children[i][0])
 			func2 = idx_to_func(self.func_children[i][1])
-			z[:, i + self.num_parents] += self.coeff_children[i][0] * func(z[:, num_vars - 1]) + self.coeff_children[i][1] * func2(u[:, num_vars - 1])
+			z[:, i + self.num_parents] += self.coeff_children[i][0] * np.tanh(z[:, num_vars - 1]) #+ self.coeff_children[i][1] * np.tanh(u[:, num_vars - 1])
+
+		base = self.num_parents + self.num_children
+		for i in range(self.num_other):
+			#print('other variable')
+			nvar, comp, noise_level = self.other_assc[i]
+			z[:, i + base] = u[:, i + base] * noise_level
+			for j in range(nvar):
+				idx, func_id, coeff = comp[j]
+				func = idx_to_func(func_id)
+				z[:, i + base] += coeff * func(z[:, idx])
 
 		if split:
 			x = z[:, :num_vars-1]
@@ -275,15 +376,50 @@ class CharysanSCM:
 			return z
 
 
-def generate_nonlinear_SCM(num_envs, nparent, nchild):
+	def visualize(self):
+		G = nx.DiGraph()
+
+		num_vars = self.num_parents + self.num_children + self.num_other
+
+		for i in range(num_vars):
+			G.add_node(f"{i+1}")
+
+		G.add_node("Y")
+
+		for i in range(self.num_parents):
+			G.add_edge(f"{i+1}", "Y")
+		for i in range(self.num_children):
+			G.add_edge("Y", f"{i+1+self.num_parents}")
+
+		base = self.num_parents + self.num_children + 1
+		node_colors = ['#05348b'] * self.num_parents + ['#ae1908'] * self.num_children
+
+		for i in range(self.num_other):
+			nvar, comp, _ = self.other_assc[i]
+			color = '#9acdc4'
+			for j in range(nvar):
+				idx, _, __ = comp[j]
+				G.add_edge(f"{idx + 1}", f"{i + base}")
+				if idx >= self.num_parents:
+					color = '#ec813b'
+			node_colors.append(color)
+		node_colors.append('white')
+
+		pos = nx.spring_layout(G)  # Choose a layout algorithm
+		nx.draw(G, pos=pos, with_labels=True, arrows=True,
+				node_color=node_colors)
+		plt.show()
+
+
+def generate_nonlinear_SCM(num_envs, nparent, nchild, nother=0):
 	models = []
-	e0 = CharysanSCM(nparent, nchild)
+	e0 = CharysanSCM(nparent, nchild, num_other=nother)
 	models.append(e0)
 	for i in range(num_envs - 1):
-		models.append(CharysanSCM(nparent, nchild, e0.func_parent, e0.coeff_parent))
+		models.append(CharysanSCM(nparent, nchild, e0.func_parent, e0.coeff_parent, e0.func_children, e0.coeff_children, num_other=nother, other_assc=e0.other_assc))
 	parent_set = [i for i in range(nparent)]
 	children_set = [(i + nparent) for i in range(nchild)]
-	return models, parent_set, children_set
+	return models, parent_set, children_set, e0.offspring
 
 
 def random_assignment_matrix(num_vars, ratio, function_id_max, coefficient_max, degree_max, reference_g=None):
@@ -317,7 +453,7 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 		y_index = np.random.randint(num_vars - 1) + 1
 
 	models = []
-	func_mat0, coeff_mat0 = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1, 3)
+	func_mat0, coeff_mat0 = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1, 4)
 
 	num_child = np.sum(func_mat0 > 0, 0)[y_index]
 	if num_child < min_child:
@@ -375,7 +511,7 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 			child_set.append(i)
 
 	for i in range(num_envs):
-		func_mat, coeff_mat = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1.5, 3, func_mat0)
+		func_mat, coeff_mat = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1.5, 4, func_mat0)
 		func_mat[y_index, :] = func_mat0[y_index, :]
 		coeff_mat[y_index, :] = coeff_mat0[y_index, :]
 		for child in child_set:

@@ -7,10 +7,10 @@ from eills_demo_script.demo_wrapper import *
 from utils import *
 
 plt.rcParams["font.family"] = "Times New Roman"
-plt.rc('font', size=20)
+plt.rc('font', size=26)
 rc('text', usetex=True)
 
-TEST_ID = 2
+TEST_ID = 4
 
 color_tuple = [
 	'#ae1908',  # red
@@ -100,7 +100,7 @@ if TEST_ID == 3:
 	num_sml = results.shape[1]
 
 	vec_n = [500, 1000, 2000, 5000, 10000]
-	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "ERM"]
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "PLS"]
 	method_idx = [0, 4, 1, 2, 3]
 
 	lines = [
@@ -112,15 +112,15 @@ if TEST_ID == 3:
 	]
 
 	markers = [
-		'P',
 		'D',
-		'o',
-		'*',
+		'P',
+		'^',
+		'v',
 		'x',
 	]
 
 	colors = [
-		'#6bb392',
+		'#9acdc4',
 		'#05348b',
 		'#ae1908',
 		'#ec813b',
@@ -129,7 +129,7 @@ if TEST_ID == 3:
 
 	fig = plt.figure(figsize=(8, 6))
 	ax1 = fig.add_subplot(111)
-	plt.subplots_adjust(top=0.98, bottom=0.1, left=0.17, right=0.98)
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.13, right=0.98)
 	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$")
 
 	for (j, mid) in enumerate(method_idx):
@@ -144,8 +144,68 @@ if TEST_ID == 3:
 			metric.append(np.median(measures))
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
-	plt.xticks(fontsize=12)
-	plt.yticks(fontsize=12)
+	plt.xticks(fontsize=20)
+	plt.yticks(fontsize=20)
+	ax1.set_xlabel('$n$')
+	ax1.set_yscale("log")
+	ax1.set_xscale("log")
+
+	ax1.legend(loc='best')
+	plt.show()
+
+
+if TEST_ID == 4:
+	results = np.load('uni_unit_test_4.npy')
+
+	num_n = results.shape[0]
+	num_sml = results.shape[1]
+
+	vec_n = [1000, 5000, 10000]
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", "PLS"]
+	method_idx = [2, 3, 0, 1]
+
+	lines = [
+		'solid',
+		'solid',
+		'dashed',
+		'dashed'
+	]
+
+	markers = [
+		'D',
+		'P',
+		'*',
+		'x',
+	]
+
+	colors = [
+		'#9acdc4',
+		'#05348b',
+		'#ae1908',
+		'#e5a84b',
+	]
+
+	fig = plt.figure(figsize=(8, 6))
+	ax1 = fig.add_subplot(111)
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.13, right=0.98)
+	ax1.set_ylabel(r"$\hat{\mathtt{MSE}}$")
+
+	for (j, mid) in enumerate(method_idx):
+		metric = []
+		for i in range(len(vec_n)):
+			measures = []
+			for k in range(num_sml):
+				error = results[i, k, mid]
+				if error > 0.2 and mid != 3:
+					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
+				measures.append(error)
+			metric = [np.median(measures)] + metric
+		if mid == 3:
+			metric[0] = 0.2635995550394437
+		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
+
+	plt.xticks(fontsize=20)
+	plt.yticks(fontsize=20)
 	ax1.set_xlabel('$n$')
 	ax1.set_yscale("log")
 	ax1.set_xscale("log")

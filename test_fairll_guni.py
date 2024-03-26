@@ -57,6 +57,8 @@ elif TEST_MODE == 3:
 	get_linear_SCM(num_vars=dim_x + 1, num_envs=args.num_envs, y_index=dim_x // 2, 
 					min_child=args.min_child, min_parent=args.min_parent, nonlinear_id=5, 
 					bias_greater_than=args.lsbias, log=args.log)
+	models[0].visualize(offspring_set)
+
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
@@ -153,29 +155,29 @@ color_rsp = [color_tuple[i] for i in rsp]
 print_vector(packs['gate_rec'][-1,:], color_rsp)
 print_vector(beta, color_rsp)
 
-plt.figure(figsize=(16, 16))
-ax1 = plt.subplot(2, 2, 1)
-ax2 = plt.subplot(2, 2, 2)
-ax3 = plt.subplot(2, 2, 3)
-ax4 = plt.subplot(2, 2, 4)
+plt.figure(figsize=(8, 8))
+ax1 = plt.subplot(1, 1, 1)
+#ax2 = plt.subplot(2, 2, 2)
+#ax3 = plt.subplot(2, 2, 3)
+#ax4 = plt.subplot(2, 2, 4)
 
-it_display = niters // iter_save
+it_display = niters // 100
 it_arr = np.arange(it_display)
 
 for i in range(dim_x):
 	ax1.plot(it_arr, gate[:it_display, i], color=color_tuple[rsp[i]])
-	ax2.plot(it_arr, para[:it_display, i] * gate[:it_display, i], color=color_tuple[rsp[i]])
+#	ax2.plot(it_arr, para[:it_display, i] * gate[:it_display, i], color=color_tuple[rsp[i]])
 ax1.set_xlabel('iters (100)')
 ax1.set_ylabel('sigmoid(logits)')
-ax2.set_xlabel('iters (100)')
-ax2.set_ylabel(r'weight $\times$ sigmoid')
+#ax2.set_xlabel('iters (100)')
+#ax2.set_ylabel(r'weight $\times$ sigmoid')
 
-ax3.plot(it_arr, loss_rec[:, 0])
-ax3.set_xlabel('iters (100)')
-ax3.set_ylabel('loss R')
+#ax3.plot(it_arr, loss_rec[:, 0])
+#ax3.set_xlabel('iters (100)')
+#ax3.set_ylabel('loss R')
 
-ax4.plot(it_arr, loss_rec[:, 1])
-ax4.set_xlabel('iters (100)')
-ax4.set_ylabel('loss J')
+#ax4.plot(it_arr, loss_rec[:, 1])
+#ax4.set_xlabel('iters (100)')
+#ax4.set_ylabel('loss J')
 
 plt.show()

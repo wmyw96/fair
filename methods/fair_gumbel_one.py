@@ -131,7 +131,7 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 			with torch.no_grad():
 				weight = model.g.weight.detach().cpu()
 				logits = model_var.get_logits_numpy()
-				gate_rec.append(sigmoid(logits / tau))
+				gate_rec.append(sigmoid(logits))
 				weight_rec.append(np.squeeze(weight.numpy() + 0.0))
 			#print(logits, np.squeeze(weight.numpy() + 0.0))
 			loss_rec.append(np.mean(my_loss, 0))
@@ -149,7 +149,7 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 
 
 
-def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=2, width_g=128, depth_f=2, width_f=196, offset=-3,
+def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_g=128, depth_f=2, width_f=196, offset=-3,
 						hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=5, niters_g=1, weight_decay_f=1e-3, weight_decay_g=1e-4, add_bn=False,
 						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, temp_iter=50000, iter_save=100, gate_samples=20, log=False):
 	'''

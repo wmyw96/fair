@@ -37,7 +37,7 @@ parser.add_argument("--mode", help="test mode", type=int, default=1)
 parser.add_argument("--diter", help="iter of discminator", type=int, default=2)
 parser.add_argument("--giter", help="iter of predictor", type=int, default=1)
 parser.add_argument("--temp_iter", help="iter to attain final temp", type=int, default=50000)
-parser.add_argument("--threshold", help="truncation threshold", type=float, default=0.85)
+parser.add_argument("--threshold", help="truncation threshold", type=float, default=0.9)
 parser.add_argument("--riter", help="iter of refitting", type=int, default=10000)
 parser.add_argument("--offset", help="init offset", type=float, default=-3)
 
@@ -76,14 +76,26 @@ elif TEST_MODE == 6:
 	dim_x = 12
 	models, parent_set, child_set = \
 		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=7, bias_greater_than=args.lsbias, log=args.log)
+elif TEST_MODE == 7:
+	dim_x = 12
+	models, parent_set, child_set, offspring_set = \
+		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=5, dim_x=dim_x, bias_greater_than=args.lsbias, log=args.log)
+elif TEST_MODE == 8:
+	dim_x = 26
+	models, parent_set, child_set, offspring_set = \
+		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=4, dim_x=dim_x, bias_greater_than=args.lsbias, log=args.log)
+	models[0].visualize()
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"
 exp_name += f"_lsbias{args.lsbias}_itemp{args.init_temp}_ftemp{args.final_temp}_gamma{args.gamma}_bz{args.batch_size}_seed{args.seed}"
 
 # generate data
-print(parent_set, child_set)
+print(parent_set, child_set, offspring_set)
 xs, ys, yts = sample_from_SCM(models, args.n)
+
+for j in range(dim_x):
+	print('j = %d, x_min0 = %.2f, x_max0 = %.2f, x_min1 = %.2f, x_max1 = %.2f,' % (j, np.min(xs[0][:, j]), np.max(xs[0][:, j]), np.min(xs[1][:, j]), np.max(xs[1][:, j])))
 
 # generate valid & test data
 xvs, yvs, yvts = sample_from_SCM(models, args.n // 7 * 3)
@@ -119,6 +131,7 @@ packs = fairnn_sgd_gumbel_uni(xs, ys, eval_data=eval_data, hyper_gamma=args.gamm
 							final_temp=args.final_temp, temp_iter=args.temp_iter, iter_save=iter_save, log=args.log)
 
 mask = (packs['gate_rec'][-1] > args.threshold) * 1.0
+print(mask)
 
 # Report estimation performance
 packs2 = fairnn_sgd_gumbel_refit(xs, ys, mask, eval_data, learning_rate=args.lr, niters=args.riter, 
