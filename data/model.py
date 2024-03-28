@@ -252,6 +252,9 @@ def relu(x):
 	return np.maximum(0, x)
 
 
+def sigmoid(x):
+	return 1/(1 + np.exp(-x))
+
 def idx_to_func(idx):
 	if idx == 1:
 		return np.sin
@@ -308,7 +311,7 @@ class CharysanSCM:
 		self.num_other = num_other
 		self.other_assc = []
 		for i in range(num_other):
-			nvar = np.random.randint(3)
+			nvar = np.random.randint(5)
 			comp = []
 			#mystr = 'var %d: ' % (i + num_parents + num_children)
 			if other_assc is None:
@@ -513,7 +516,7 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 	for i in range(num_envs):
 		func_mat, coeff_mat = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1.5, 4, func_mat0)
 		func_mat[y_index, :] = func_mat0[y_index, :]
-		coeff_mat[y_index, :] = coeff_mat0[y_index, :]
+		coeff_mat[y_index, :y_index] = coeff_mat0[y_index, :y_index]
 		for child in child_set:
 			while True:
 				coeff_mat[child, y_index] = (np.abs(np.random.uniform(0, 1)) + 0.5) * (2*np.random.randint(2)-1)
@@ -536,7 +539,7 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 				if func_mat[i, j] > 0 and j in offspring_set:
 					offspring_set.append(i)
 	offspring_set = list(set(offspring_set))
-	print(f'function assignment = {func_mat0[y_index, :y_index]}')
+	#print(f'function assignment = {func_mat0[y_index, :y_index]}')
 	return models, func_mat0[y_index, :-1], coeff_mat0[y_index, :-1], parent_set, child_set, offspring_set
 
 
@@ -569,4 +572,23 @@ def sample_from_SCM(models, n, index=0, shuffle=False):
 		ys.append(y)
 		yts.append(yt)
 	return xs, ys, yts
+
+
+class ClassificationSCM:
+	def __init__(self, beta_t=1, spur=0.95):
+		self.beta = beta_t
+		self.spur = spur
+
+	def sample(self, n):
+		x = np.random.normal(0, 1, n)
+		y = (np.random.uniform(0, 1, n) <= sigmoid(self.beta * x)) * 1.0
+		coin_flip = (np.random.uniform(0, 1, n) <= self.spur) * 1.0
+		z = y * coin_flip + (1 - y) * (1 - coin_flip)
+		xx = np.concatenate([np.reshape(x, (n, 1)), np.reshape(z, (n, 1))], 1)
+		yy = np.reshape(y, (n, 1))
+		return xx, yy
+
+
+def SCM_class(signal, s1, s2):
+	return [ClassificationSCM(signal, s1), ClassificationSCM(signal, s2)]
 

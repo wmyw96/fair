@@ -74,7 +74,7 @@ if TEST_ID == 2:
 	np.save('uni_unit_test_2.npy', result)
 
 if TEST_ID == 3:
-	candidate_n = [500, 1000, 2000, 5000, 10000]
+	candidate_n = [200, 500, 1000, 2000, 5000]
 
 	num_repeats = 50
 
@@ -114,7 +114,7 @@ if TEST_ID == 3:
 												niters=50000, batch_size=64, init_temp=5,
 												final_temp=0.1, log=False)
 					beta = packs['weight']
-					mask = packs['gate_rec'][-1] > 0.9
+					mask = packs['gate_rec'][-1] > 0.7
 
 					# Refit using LS
 					full_var = (np.arange(70))
@@ -129,6 +129,7 @@ if TEST_ID == 3:
 					result[ni, t, mid + 1, :] = beta
 				
 				print(f'method {mid}, l2 error = {np.sum(np.square(true_coeff - beta))}')
+			print(f'method {len(methods)}, l2 error = {np.sum(np.square(true_coeff - result[ni, t, len(methods) + 1, :]))}')
 			end_time = time.time()
 			print(f'Running Case: n = {n}, t = {t}, secs = {end_time - start_time}s')
 
@@ -138,11 +139,11 @@ if TEST_ID == 3:
 
 if TEST_ID == 4:
 	#candidate_n = [1000, 2000, 5000, 10000, 200000]
-	candidate_n = [1000, 3000, 5000, 7000, 10000]
+	candidate_n = [1000, 2000, 3000, 5000, 10000]
 
 	# candidate_n = [500, 1000, 2000, 5000, 10000]
 
-	num_repeats = 30
+	num_repeats = 50
 
 	np.random.seed(0)
 
@@ -195,13 +196,14 @@ if TEST_ID == 4:
 			# Report FAIR-Gumbel performance
 
 			iters = 75000
+			threshold = 0.9
+			if n <= 1000:
+				threshold = 0.6
+
 			packs1 = fairnn_sgd_gumbel_uni(xs, ys, eval_data=eval_data, hyper_gamma=36, learning_rate=lr, niters_d=3, 
 										niters_g=1, niters=iters, batch_size=batch_size, init_temp=5, offset=-3,
 										final_temp=0.05, iter_save=100, log=False)
 
-			threshold = 0.9
-			if n == 1000:
-				threshold = 0.65
 			mask = (packs1['gate_rec'][-1] > threshold) * 1.0
 
 			eval_loss1 = packs1['loss_rec']

@@ -66,7 +66,7 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 		print(f'================================================================================')
 
 	model = FairLinear(dim_x, num_envs)
-	model_var = GumbelGate(dim_x, init_offset=-3, device='cpu')
+	model_var = GumbelGate(dim_x, init_offset=-1, device='cpu')
 	optimizer_var = optim.Adam(model_var.parameters(), lr=learning_rate)
 
 	optimizer_g = optim.Adam(model.params_g(), lr=learning_rate)
@@ -147,6 +147,159 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 
 	return ret
 
+
+def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=2, niters_g=1, 
+						anneal_rate=0.993, offset=-3, batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, iter_save=100, log=False):
+	'''
+		Implementation of FAIR-LL estimator with gumbel discrete approximation
+
+		Parameter
+		----------
+		features : list 
+			list of numpy matrices with shape (n_k, p) representing the explanatory variables
+		responses : list
+			list of numpy matrices with shape (n_k, 1) representing the response variable
+		hyper_gamma : float
+			hyper-parameter gamma control the degree of invariance
+		learning_rate : float
+			learning rate for stochastic gradient descent
+		niters : int
+			number of outer iterations
+		niters_d : int
+			number of inner iterations for discriminator
+		niters_g : int
+			number of inner iterations for generator
+		batch_size : int
+			batch_size for stochastic gradient descent
+		init_temp : float
+			initial temperature for gumbel approximation
+		final_temp: float
+			final temperature for gumbel approximation
+		log : bool
+			whether to show logs during training
+
+		Returns
+		----------
+		a dict collecting things of interests
+	'''
+	num_envs = len(features)
+	dim_x = np.shape(features[0])[1]
+
+	if log:
+		print(f'================================================================================')
+		print(f'================================================================================')
+		print(f'==')
+		print(f'==  FAIR Linear/Linear Model Gumbel: num of envs = {num_envs}, x dim = {dim_x}')
+		print(f'==')
+		print(f'================================================================================')
+		print(f'================================================================================')
+
+	model = FairNN(dim_x, 0, 0, 0, 0, num_envs, None)
+	model_var = GumbelGate(dim_x, init_offset=offset, device='cpu')
+	optimizer_var = optim.Adam(model_var.parameters(), lr=learning_rate)
+
+	optimizer_g = optim.Adam(model.params_g(), lr=learning_rate, weight_decay=5e-3)
+	optimizer_f = optim.Adam(model.params_f(), lr=learning_rate, weight_decay=5e-3)
+
+	# construct dataset from numpy array
+	dataset = MultiEnvDataset(features, responses)
+	gate_rec = []
+	weight_rec = []
+	loss_rec = []
+	# start training
+	if log:
+		it_gen = tqdm(range(niters))
+	else:
+		it_gen = range(niters)
+
+	if eval_data is not None:
+		test_x, test_y = eval_data
+		test_x_th = torch.tensor(test_x).float()
+		eval_iter = niters // 10
+	else:
+		eval_iter = niters + 2
+
+	tau = init_temp
+	loss_rec, acc_rec = [], []
+	for it in it_gen:
+		# calculate the temperature
+		if (it + 1) % 100 == 0:
+			tau = max(final_temp, tau * anneal_rate)
+		if it % 10000 == 0 and log:
+			print(f'annealed tau: {tau}')
+		tau_logits = 1
+
+		# train the discriminator
+		for i in range(niters_d):
+			optimizer_var.zero_grad()
+			optimizer_f.zero_grad()
+			optimizer_g.zero_grad()
+			model.train()
+
+			xs, ys = dataset.next_batch(batch_size)
+			cat_y = torch.cat(ys, 0)
+			gate = model_var.generate_mask((tau_logits, tau)).detach()
+
+			out_g, out_f = model([gate * x for x in xs])
+			loss_de = - torch.mean((cat_y - torch.sigmoid(out_g).detach()) * out_f - 0.5 * out_f * out_f)
+			loss_de.backward()
+			optimizer_f.step()
+
+
+		# train the generator
+		for i in range(niters_g):
+			optimizer_g.zero_grad()
+			optimizer_var.zero_grad()
+			optimizer_f.zero_grad()
+			model.train()
+
+			xs, ys = dataset.next_batch(batch_size)
+			gate = model_var.generate_mask((tau_logits, tau))
+			cat_y = torch.cat(ys, 0)
+			out_g, out_f = model([gate * x for x in xs])
+			out_prob = torch.sigmoid(out_g)
+			loss_r = -0.5 * torch.mean((cat_y * torch.log(out_prob + 1e-9) + (1 - cat_y) * torch.log(1 - out_prob + 1e-9)))
+			loss_j = torch.mean((cat_y - out_prob) * out_f - 0.5 * out_f * out_f)
+			loss = loss_r + hyper_gamma * loss_j
+			accuracy = torch.mean((out_g >= 0) * cat_y + (out_g < 0) * (1 - cat_y))
+			loss.backward()
+
+			loss_rec.append(loss_r.item())
+			acc_rec.append(accuracy.item())
+			optimizer_g.step()
+			optimizer_var.step()
+
+		# save the weight/logits for linear model
+		if it % iter_save == 0:
+			with torch.no_grad():
+				weight = model.g.relu_stack.weight.detach().cpu()
+				logits = model_var.get_logits_numpy()
+				gate_rec.append(sigmoid(logits))
+				weight_rec.append(np.squeeze(weight.numpy() + 0.0))
+			#if log:
+			#	print(f'Train Loss = {np.mean(loss_rec)}, Train accuracy = {np.mean(acc_rec)}')
+			#	print(f'Gate = {np.sigmoid(logits)}')
+
+		if (it + 1) % eval_iter == 0:
+			model.eval()
+			with torch.no_grad():
+				pred_test = model(torch.sigmoid(model_var.logits) * test_x_th, pred=True).detach().cpu().numpy()
+
+			def accuracy(x, y):
+				return np.mean((x >= 0) * y + (x < 0) * (1 - y))
+			test_loss = accuracy(pred_test, test_y)
+
+			if log:
+				print(f'iter = {it}, test loss = {test_loss}, gate = {sigmoid(model_var.get_logits_numpy())}')
+
+
+	ret = {'weight': weight_rec[-1] * sigmoid(logits),
+			'weight_rec': np.array(weight_rec),
+			'gate_rec': np.array(gate_rec),
+			'model': model,
+			'fair_var': model_var,}
+
+	return ret
 
 
 def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_g=128, depth_f=2, width_f=196, offset=-3,

@@ -10,7 +10,7 @@ plt.rcParams["font.family"] = "Times New Roman"
 plt.rc('font', size=26)
 rc('text', usetex=True)
 
-TEST_ID = 4
+TEST_ID = 3
 
 color_tuple = [
 	'#ae1908',  # red
@@ -99,7 +99,7 @@ if TEST_ID == 3:
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
-	vec_n = [500, 1000, 2000, 5000, 10000]
+	vec_n = [200, 500, 1000, 2000, 5000]
 	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "PLS"]
 	method_idx = [0, 4, 1, 2, 3]
 
@@ -143,12 +143,11 @@ if TEST_ID == 3:
 				measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
 			metric.append(np.median(measures))
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
-
+	ax1.set_yscale("log")
+	ax1.set_xscale("log")
 	plt.xticks(fontsize=20)
 	plt.yticks(fontsize=20)
 	ax1.set_xlabel('$n$')
-	ax1.set_yscale("log")
-	ax1.set_xscale("log")
 
 	ax1.legend(loc='best')
 	plt.show()
@@ -160,7 +159,7 @@ if TEST_ID == 4:
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
-	vec_n = [1000, 5000, 10000]
+	vec_n = [1000, 3000, 5000, 7000, 10000]
 	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", "PLS"]
 	method_idx = [2, 3, 0, 1]
 
@@ -199,9 +198,9 @@ if TEST_ID == 4:
 				if error > 0.2 and mid != 3:
 					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
 				measures.append(error)
-			metric = [np.median(measures)] + metric
-		if mid == 3:
-			metric[0] = 0.2635995550394437
+			metric += [np.median(measures)]
+		#if mid == 3:
+		#	metric[0] = 0.2635995550394437
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
 	plt.xticks(fontsize=20)
