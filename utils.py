@@ -2,11 +2,11 @@ from data.model import generate_random_SCM, sample_from_SCM, generate_nonlinear_
 from methods.tools import *
 
 
-def get_linear_SCM(num_vars, num_envs, y_index, min_child, min_parent, nonlinear_id, bias_greater_than=0.0, log=False):
+def get_linear_SCM(num_vars, num_envs, y_index, min_child, min_parent, nonlinear_id, bias_greater_than=0.0, same_var=True, log=False):
 	while True:
 		models, true_func, true_coeff, parent_set, child_set, offspring_set = \
 			generate_random_SCM(num_vars=num_vars, num_envs=num_envs, y_index=y_index, min_child=min_child, 
-								min_parent=min_parent, nonlinear_id=nonlinear_id)
+								min_parent=min_parent, nonlinear_id=nonlinear_id, same_var=same_var)
 		xs, ys, yts = sample_from_SCM(models, 100000)
 
 		beta_ls = pooled_least_squares(xs, ys)

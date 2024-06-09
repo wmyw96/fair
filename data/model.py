@@ -338,6 +338,7 @@ class CharysanSCM:
 				self.other_assc.append((nvar, comp, noise_level))
 
 		self.offspring = list(set(offspring))
+		self.hcm = 0
 
 
 	def sample(self, n, split=True):
@@ -351,6 +352,10 @@ class CharysanSCM:
 			z[:, i] = u[:, i]
 			func = idx_to_func(self.func_parent[i])
 			z[:, num_vars - 1] += func(u[:, i])
+
+		if self.hcm == 1:
+			z[:, num_vars - 1] = z[:, 0] * (z[:, 1] ** 3) + 2 * np.log(1 + np.exp(np.tanh(z[:, 2])) + np.exp(z[:, 3])) + np.sin(z[:, 4])
+			print('Use HCM mode 1')
 
 		z[:, num_vars - 1] += u[:, num_vars - 1]
 
@@ -451,7 +456,7 @@ def random_assignment_matrix(num_vars, ratio, function_id_max, coefficient_max, 
 	return function_matrix, coefficient_matrix
 
 
-def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, nonlinear_id=5, law='linear'):
+def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_envs=2, nonlinear_id=5, law='linear', same_var=True):
 	if y_index is None:
 		y_index = np.random.randint(num_vars - 1) + 1
 
@@ -516,7 +521,10 @@ def generate_random_SCM(num_vars, y_index=None, min_child=0, min_parent=0, num_e
 	for i in range(num_envs):
 		func_mat, coeff_mat = random_assignment_matrix(num_vars, 0.4, nonlinear_id, 1.5, 4, func_mat0)
 		func_mat[y_index, :] = func_mat0[y_index, :]
-		coeff_mat[y_index, :y_index] = coeff_mat0[y_index, :y_index]
+		if same_var:
+			coeff_mat[y_index, :] = coeff_mat0[y_index, :]
+		else:
+			coeff_mat[y_index, :y_index] = coeff_mat0[y_index, :y_index]
 		for child in child_set:
 			while True:
 				coeff_mat[child, y_index] = (np.abs(np.random.uniform(0, 1)) + 0.5) * (2*np.random.randint(2)-1)
@@ -583,10 +591,12 @@ class ClassificationSCM:
 		x = np.random.normal(0, 1, n)
 		y = (np.random.uniform(0, 1, n) <= sigmoid(self.beta * x)) * 1.0
 		coin_flip = (np.random.uniform(0, 1, n) <= self.spur) * 1.0
-		z = y * coin_flip + (1 - y) * (1 - coin_flip)
+		z = (y * coin_flip + (1 - y) * (1 - coin_flip)) * self.spur
+		z = z + np.random.normal(0, 0.3, n)
 		xx = np.concatenate([np.reshape(x, (n, 1)), np.reshape(z, (n, 1))], 1)
 		yy = np.reshape(y, (n, 1))
 		return xx, yy
+
 
 
 def SCM_class(signal, s1, s2):

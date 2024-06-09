@@ -218,7 +218,7 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 		eval_iter = niters // 10
 	else:
 		eval_iter = niters + 2
-
+	
 	tau = init_temp
 	loss_rec, acc_rec = [], []
 	for it in it_gen:
@@ -290,7 +290,9 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 			test_loss = accuracy(pred_test, test_y)
 
 			if log:
-				print(f'iter = {it}, test loss = {test_loss}, gate = {sigmoid(model_var.get_logits_numpy())}')
+				gate = sigmoid(model_var.get_logits_numpy())
+				print(f'iter = {it}, train acc = {np.mean(acc_rec)}, test acc = {test_loss}, gate = {sigmoid(model_var.get_logits_numpy())}')
+				print(f'gate min = {np.min(gate)}, gate max = {np.max(gate)}')
 
 
 	ret = {'weight': weight_rec[-1] * sigmoid(logits),
@@ -303,7 +305,7 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 
 
 def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_g=128, depth_f=2, width_f=196, offset=-3,
-						hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=5, niters_g=1, weight_decay_f=1e-3, weight_decay_g=1e-4, add_bn=False,
+						hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=5, niters_g=1, weight_decay_f=1e-3, weight_decay_g=1e-3, add_bn=False,
 						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, temp_iter=50000, iter_save=100, gate_samples=20, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation

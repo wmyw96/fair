@@ -85,6 +85,13 @@ elif TEST_MODE == 8:
 	models, parent_set, child_set, offspring_set = \
 		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=4, dim_x=dim_x, bias_greater_than=args.lsbias, log=args.log)
 	models[0].visualize()
+elif TEST_MODE == 9:
+	dim_x = 26
+	models, parent_set, child_set, offspring_set = \
+		get_nonlinear_SCM(num_envs=2, nparent=5, nchild=4, dim_x=dim_x, bias_greater_than=args.lsbias, log=args.log)
+	models[0].hcm = 1
+	models[1].hcm = 1
+	models[0].visualize()
 
 # set saving dir
 exp_name = f"n{args.n}_nenvs{args.num_envs}_dimx{dim_x}_niters{args.niters}_mch_{args.min_child}_mpa{args.min_parent}_lr{args.lr}"

@@ -7,10 +7,10 @@ from eills_demo_script.demo_wrapper import *
 from utils import *
 
 plt.rcParams["font.family"] = "Times New Roman"
-plt.rc('font', size=26)
+plt.rc('font', size=16)
 rc('text', usetex=True)
 
-TEST_ID = 3
+TEST_ID = 5
 
 color_tuple = [
 	'#ae1908',  # red
@@ -28,47 +28,47 @@ if TEST_ID == 2:
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
-	vec_n = [100, 300, 700, 1000, 2000]
-	method_name = ['EILLS', "FAIR-BF", "FAIR-GB", r"FAIR-RF", "Oracle", r"IRM", r"Anchor", "ERM"]
-	method_idx = [0, 1, 2, 7, 3, 4, 5, 6]
+	vec_n = [50, 100, 300, 500, 800, 1000]
+	method_name = ['EILLS', "FAIR-BF", r"FAIR-RF", "Oracle", r"IRM", r"Anchor", r"ICP", r"Pool-LS"]
+	method_idx = [0, 1, 8, 3, 4, 5, 6, 7]
 
 	lines = [
-		'dashed',
 		'solid',
 		'solid',
 		'solid',
 		'dashed',
 		'dotted',
 		'dotted',
-		'dashed'
+		'dotted',
+		'dashed',
 	]
 
 	markers = [
-		'P',
-		'o',
-		'D',
-		'+',
-		'*',
+		'>',
 		's',
+		'D',
+		'*',
+		'+',
+		'o',
+		'<',
 		'x',
-		'<'
 	]
 
 	colors = [
-		'#6bb392',
-		'#05348b',
+		'#9acdc4',
 		'#05348b',
 		'#05348b',
 		'#ae1908',
 		'#ec813b',
 		'#e5a84b',
-		'#9acdc4'
+		'#6bb392',
+		'gray',
 	]
 
-	fig = plt.figure(figsize=(8, 6))
+	fig = plt.figure(figsize=(6, 6))
 	ax1 = fig.add_subplot(111)
-	plt.subplots_adjust(top=0.98, bottom=0.1, left=0.17, right=0.98)
-	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$")
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.17, right=0.98)
+	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$", fontsize=22)
 
 	for (j, mid) in enumerate(method_idx):
 		metric = []
@@ -76,19 +76,18 @@ if TEST_ID == 2:
 			measures = []
 			for k in range(num_sml):
 				error = np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :]))
-				if error > 0.2 and mid < 3:
-					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
-				measures.append(np.sum(np.square(results[i, k, mid+1, :] - results[i, k, 0, :])))
-			metric.append(np.mean(measures))
-		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
+				measures.append(error)
+			if i > 0:
+				metric.append(np.median(measures))
+		ax1.plot(np.array(vec_n)[1:], metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
-	plt.xticks(fontsize=12)
-	plt.yticks(fontsize=12)
-	ax1.set_xlabel('$n$')
-	#ax1.set_yscale("log")
+	plt.xticks(fontsize=20)
+	plt.yticks(fontsize=20)
+	ax1.set_xlabel('$n$', fontsize=22)
+	ax1.set_yscale("log")
 	ax1.set_xscale("log")
 
-	ax1.legend(loc='best')
+	ax1.legend(loc='upper left')
 	plt.show()
 	#plt.savefig("l2_error.pdf")
 
@@ -100,7 +99,7 @@ if TEST_ID == 3:
 	num_sml = results.shape[1]
 
 	vec_n = [200, 500, 1000, 2000, 5000]
-	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "PLS"]
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", r"Semi-Oracle", "Pool-LS"]
 	method_idx = [0, 4, 1, 2, 3]
 
 	lines = [
@@ -113,7 +112,7 @@ if TEST_ID == 3:
 
 	markers = [
 		'D',
-		'P',
+		's',
 		'^',
 		'v',
 		'x',
@@ -127,10 +126,10 @@ if TEST_ID == 3:
 		'#e5a84b',
 	]
 
-	fig = plt.figure(figsize=(8, 6))
+	fig = plt.figure(figsize=(6, 6))
 	ax1 = fig.add_subplot(111)
-	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.13, right=0.98)
-	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$")
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.17, right=0.98)
+	ax1.set_ylabel(r"$\|\hat{\beta} - \beta^\star\|_2^2$", fontsize=22)
 
 	for (j, mid) in enumerate(method_idx):
 		metric = []
@@ -147,7 +146,7 @@ if TEST_ID == 3:
 	ax1.set_xscale("log")
 	plt.xticks(fontsize=20)
 	plt.yticks(fontsize=20)
-	ax1.set_xlabel('$n$')
+	ax1.set_xlabel('$n$', fontsize=22)
 
 	ax1.legend(loc='best')
 	plt.show()
@@ -155,12 +154,13 @@ if TEST_ID == 3:
 
 if TEST_ID == 4:
 	results = np.load('uni_unit_test_4.npy')
-
+	results2 = np.load('uni_unit_test_4_2k.npy')
+	print(np.shape(results2))
 	num_n = results.shape[0]
 	num_sml = results.shape[1]
 
-	vec_n = [1000, 3000, 5000, 7000, 10000]
-	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", "PLS"]
+	vec_n = [1000, 2000, 3000, 5000]
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", "Pool-LS"]
 	method_idx = [2, 3, 0, 1]
 
 	lines = [
@@ -172,7 +172,7 @@ if TEST_ID == 4:
 
 	markers = [
 		'D',
-		'P',
+		's',
 		'*',
 		'x',
 	]
@@ -184,30 +184,100 @@ if TEST_ID == 4:
 		'#e5a84b',
 	]
 
-	fig = plt.figure(figsize=(8, 6))
+	fig = plt.figure(figsize=(6, 6))
 	ax1 = fig.add_subplot(111)
-	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.13, right=0.98)
-	ax1.set_ylabel(r"$\hat{\mathtt{MSE}}$")
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.17, right=0.98)
+	ax1.set_ylabel(r"$\widehat{\mathtt{MSE}}$", fontsize=22)
 
 	for (j, mid) in enumerate(method_idx):
 		metric = []
 		for i in range(len(vec_n)):
 			measures = []
 			for k in range(num_sml):
-				error = results[i, k, mid]
+				if i == 1:
+					print(i, k)
+					error = results2[0, k, mid]
+				else:
+					error = results[i, k, mid]
 				if error > 0.2 and mid != 3:
 					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
 				measures.append(error)
+			
 			metric += [np.median(measures)]
 		#if mid == 3:
 		#	metric[0] = 0.2635995550394437
 		ax1.plot(vec_n, metric, linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
 
-	plt.xticks(fontsize=20)
-	plt.yticks(fontsize=20)
-	ax1.set_xlabel('$n$')
-	ax1.set_yscale("log")
-	ax1.set_xscale("log")
+	#plt.xticks(ticks=[1000, 3000, 5000], fontsize=20)
+	ax1.set_xlabel('$n$', fontsize=22)
+	#ax1.set_yscale("log")
+	#ax1.set_xscale("log")
+	ax1.set_yticks(np.array([1e-2, 1e-1, 0.2, 0.4, 0.5]))
 
 	ax1.legend(loc='best')
 	plt.show()
+
+
+
+if TEST_ID == 5:
+	results = np.load('uni_unit_test_5.npy')
+	num_n = results.shape[0]
+	num_sml = results.shape[1]
+
+	#vec_n = [1000, 2000, 3000, 5000, 10000]
+	vec_n = [10000, 5000, 3000, 2000, 1000]
+
+	method_name = ["FAIR-GB", "FAIR-RF", "Oracle", "Pool-LS"]
+	method_idx = [2, 3, 0, 1]
+
+	lines = [
+		'solid',
+		'solid',
+		'dashed',
+		'dashed'
+	]
+
+	markers = [
+		'D',
+		's',
+		'*',
+		'x',
+	]
+
+	colors = [
+		'#9acdc4',
+		'#05348b',
+		'#ae1908',
+		'#e5a84b',
+	]
+
+	fig = plt.figure(figsize=(6, 6))
+	ax1 = fig.add_subplot(111)
+	plt.subplots_adjust(top=0.98, bottom=0.12, left=0.17, right=0.98)
+	ax1.set_ylabel(r"$\widehat{\mathtt{MSE}}$", fontsize=22)
+
+	for (j, mid) in enumerate(method_idx):
+		metric = []
+		for i in range(len(vec_n)):
+			measures = []
+			for k in range(num_sml):
+
+				error = results[i, k, mid]
+				if error > 0.2 and mid != 3:
+					print(f'method = {mid}, n = {vec_n[i]}, seed = {k}, error = {error}')
+				measures.append(error)
+			
+			metric += [np.median(measures)]
+		#if mid == 3:
+		#	metric[0] = 0.2635995550394437
+		ax1.plot(np.array(vec_n)[1:], np.array(metric)[1:], linestyle=lines[j], marker=markers[j], label=method_name[j], color=colors[j])
+
+	#plt.xticks(ticks=[1000, 3000, 5000], fontsize=20)
+	ax1.set_xlabel('$n$', fontsize=22)
+	#ax1.set_yscale("log")
+	ax1.set_xscale("log")
+	ax1.set_yticks(np.array([4e-2, 1e-1, 0.5, 1.0]))
+
+	ax1.legend(loc='best')
+	plt.show()
+
