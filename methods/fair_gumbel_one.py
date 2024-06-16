@@ -19,7 +19,7 @@ def print_prob(x):
 	return out_str
 
 
-def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=2, niters_g=1, 
+def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=2, niters_g=1, offset=-1,
 						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, iter_save=100, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation
@@ -66,7 +66,7 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 		print(f'================================================================================')
 
 	model = FairLinear(dim_x, num_envs)
-	model_var = GumbelGate(dim_x, init_offset=-1, device='cpu')
+	model_var = GumbelGate(dim_x, init_offset=offset, device='cpu')
 	optimizer_var = optim.Adam(model_var.parameters(), lr=learning_rate)
 
 	optimizer_g = optim.Adam(model.params_g(), lr=learning_rate)
@@ -88,8 +88,6 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 		# calculate the temperature
 		if (it + 1) % 100 == 0:
 			tau = max(final_temp, tau * 0.993)
-		if it % 10000 == 0 and log:
-			print(f'annealed tau: {tau}')
 		tau_logits = 1
 
 		# train the discriminator
@@ -135,7 +133,8 @@ def fair_ll_sgd_gumbel_uni(features, responses, hyper_gamma=10, learning_rate=1e
 				weight_rec.append(np.squeeze(weight.numpy() + 0.0))
 			#print(logits, np.squeeze(weight.numpy() + 0.0))
 			loss_rec.append(np.mean(my_loss, 0))
-
+			if log and it % 20000 == 0:
+				print(f'gate = {sigmoid(logits)}')
 
 
 	ret = {'weight': weight_rec[-1] * sigmoid(logits),
@@ -198,8 +197,8 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 	model_var = GumbelGate(dim_x, init_offset=offset, device='cpu')
 	optimizer_var = optim.Adam(model_var.parameters(), lr=learning_rate)
 
-	optimizer_g = optim.Adam(model.params_g(), lr=learning_rate, weight_decay=5e-3)
-	optimizer_f = optim.Adam(model.params_f(), lr=learning_rate, weight_decay=5e-3)
+	optimizer_g = optim.Adam(model.params_g(), lr=learning_rate, weight_decay=1e-3)
+	optimizer_f = optim.Adam(model.params_f(), lr=learning_rate, weight_decay=1e-3)
 
 	# construct dataset from numpy array
 	dataset = MultiEnvDataset(features, responses)
@@ -225,8 +224,6 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 		# calculate the temperature
 		if (it + 1) % 100 == 0:
 			tau = max(final_temp, tau * anneal_rate)
-		if it % 10000 == 0 and log:
-			print(f'annealed tau: {tau}')
 		tau_logits = 1
 
 		# train the discriminator
@@ -304,9 +301,9 @@ def fair_ll_classification_sgd_gumbel_uni(features, responses, eval_data=None, h
 	return ret
 
 
-def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_g=128, depth_f=2, width_f=196, offset=-3,
+def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_g=128, depth_f=2, width_f=196, offset=-3, anneal_rate=0.993,
 						hyper_gamma=10, learning_rate=1e-3, niters=50000, niters_d=5, niters_g=1, weight_decay_f=1e-3, weight_decay_g=1e-3, add_bn=False,
-						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, temp_iter=50000, iter_save=100, gate_samples=20, log=False):
+						batch_size=32, mask=None, init_temp=0.5, final_temp=0.05, iter_save=100, gate_samples=20, log=False):
 	'''
 		Implementation of FAIR-LL estimator with gumbel discrete approximation
 
@@ -352,6 +349,7 @@ def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_
 		print(f'================================================================================')
 
 	model = FairNN(dim_x, depth_g, width_g, depth_f, width_f, num_envs, features, add_bn)
+
 	model_var = GumbelGate(dim_x, init_offset=offset, device='cpu')
 	optimizer_var = optim.Adam(model_var.parameters(), lr=learning_rate)
 
@@ -364,7 +362,10 @@ def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_
 	if eval_data is not None:
 		valid_x, valid_y, test_x, test_y = eval_data
 		valid_x_th = torch.tensor(valid_x).float()
-		test_x_th = torch.tensor(test_x).float()
+		if isinstance(test_x, list):
+			test_x_ths = [torch.tensor(x).float() for x in test_x]
+		else:
+			test_x_ths = torch.tensor(test_x).float()
 		eval_iter = niters // 10
 	else:
 		eval_iter = niters + 2
@@ -385,9 +386,7 @@ def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_
 	for it in it_gen:
 		# calculate the temperature
 		if (it + 1) % 100 == 0:
-			tau = max(final_temp, tau * 0.993)
-		if it % 10000 == 0 and log:
-			print(f'annealed tau: {tau}')
+			tau = max(final_temp, tau * anneal_rate)
 		tau_logits = 1
 
 		# train the discriminator
@@ -446,18 +445,20 @@ def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_
 				preds.append(pred.detach().cpu().numpy())
 			out = sum(preds) / len(preds)
 			valid_loss = np.mean(np.square(out - valid_y))
-
+			test_loss = []
 			# calculate test loss
-			preds = []
-			gates = []
-			for k in range(gate_samples):
-				gate = model_var.generate_mask((tau_logits, tau))
-				pred = model(gate * test_x_th, pred=True)
-				preds.append(pred.detach().cpu().numpy())
-				gates.append((gate).detach().cpu().numpy() + 0.0)
-			out = sum(preds) / len(preds)
-			test_loss = np.mean(np.square(out - test_y))
-			loss_rec = [[valid_loss, test_loss]]
+			for e in range(len(test_x_ths)):
+				preds = []
+				gates = []
+				for k in range(gate_samples):
+					gate = model_var.generate_mask((tau_logits, tau))
+					pred = model(gate * test_x_ths[e], pred=True)
+					preds.append(pred.detach().cpu().numpy())
+					gates.append((gate).detach().cpu().numpy() + 0.0)
+				out = sum(preds) / len(preds)
+				test_loss.append(np.mean(np.square(out - test_y[e])))
+
+			loss_rec = [[valid_loss] + test_loss]
 			if log:
 				print(f'iter = {it}, test_loss = {test_loss}\ngate logits = {print_prob(sigmoid(logits))}\n' + 
 						f'gate est = {print_prob(sum(gates) / len(gates))}')
@@ -471,7 +472,7 @@ def fairnn_sgd_gumbel_uni(features, responses, eval_data=None, depth_g=1, width_
 
 
 
-def fairnn_sgd_gumbel_refit(features, responses, mask, eval_data, depth_g=2, width_g=128,
+def fairnn_sgd_gumbel_refit(features, responses, mask, eval_data, depth_g=1, width_g=128,
 						learning_rate=1e-3, niters=50000, weight_decay_g=5e-4,
 						batch_size=32, log=False):
 	'''
@@ -530,7 +531,12 @@ def fairnn_sgd_gumbel_refit(features, responses, mask, eval_data, depth_g=2, wid
 	
 	valid_x, valid_y, test_x, test_y = eval_data
 	valid_x_th = torch.tensor(valid_x).float()
-	test_x_th = torch.tensor(test_x).float()
+
+	if isinstance(test_x, list):
+		test_x_ths = [torch.tensor(x).float() for x in test_x]
+	else:
+		test_x_ths = torch.tensor(test_x).float()
+
 	eval_iter = niters // 20
 	
 	loss_rec = []
@@ -563,11 +569,13 @@ def fairnn_sgd_gumbel_refit(features, responses, mask, eval_data, depth_g=2, wid
 			valid_loss = np.mean(np.square(out - valid_y))
 
 			# calculate test loss
+			test_loss = []
 			gate = model_var.generate_mask()
-			out = model(gate * test_x_th, pred=True).detach().cpu().numpy()
-			test_loss = np.mean(np.square(out - test_y))
+			for e in range(len(test_x_ths)):
+				out = model(gate * test_x_ths[e], pred=True).detach().cpu().numpy()
+				test_loss.append(np.mean(np.square(out - test_y[e])))
 
-			loss_rec.append((valid_loss, test_loss))
+			loss_rec.append([valid_loss] + test_loss)
 			if log:
 				print(f'iter = {it}, valid_loss = {valid_loss}, test_loss = {test_loss}')
 

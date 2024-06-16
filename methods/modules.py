@@ -253,7 +253,7 @@ class FairNN(torch.nn.Module):
 			Implementation of forwards pass
 
 	'''
-	def __init__(self, input_dim, depth_g, width_g, depth_f, width_f, num_envs, xs, add_bn=False):
+	def __init__(self, input_dim, depth_g, width_g, depth_f, width_f, num_envs, xs, add_bn=False, standardize=False):
 		'''
 			Parameters
 			----------
@@ -262,12 +262,14 @@ class FairNN(torch.nn.Module):
 		'''
 		super(FairNN, self).__init__()
 		self.g = NNModule(input_dim=input_dim, depth=depth_g, width=width_g, add_bn=add_bn)
-		#self.g.standardize(np.concatenate(xs, 0))
+		#if standardize:
+		#	self.g.standardize(np.concatenate(xs, 0))
 		self.num_envs = num_envs
 		self.fs = []
 		for e in range(num_envs):
 			fe = NNModule(input_dim=input_dim, depth=depth_f, width=width_f, add_bn=add_bn)
-			#fe.standardize(xs[e])
+			#if standardize:
+			#	fe.standardize(xs[e])
 			self.fs.append(fe)
 
 

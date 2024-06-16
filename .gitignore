@@ -3,3 +3,10 @@
 log/
 *.local
 dataset/
+chamber_tmp/
+.RData
+.Rhistory
+*.npy
+*.csv
+*.pdf
+
